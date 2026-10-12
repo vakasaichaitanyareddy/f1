@@ -14,11 +14,15 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if len(plain_password.encode("utf-8")) > 72:
+        return False
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
-    # Truncate to 72 bytes if needed to adhere strictly to bcrypt protocol
-    return pwd_context.hash(password[:72])
+    byte_len = len(password.encode("utf-8"))
+    if byte_len > 72:
+        raise ValueError(f"Password cannot exceed 72 bytes (received {byte_len} bytes)")
+    return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()

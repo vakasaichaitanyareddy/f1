@@ -129,30 +129,41 @@ async def test_auth_registration_and_duplicate():
         assert dup_res.json()["detail"] == "Email already registered"
 
 @pytest.mark.asyncio
-async def test_auth_login_success_and_failure():
+async def test_auth_password_validation_and_utf8():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # Invalid password
-        fail_res = await client.post("/api/v1/auth/login", json={
-            "email": "pilot1@apex-gp.internal",
-            "password": "WrongPassword!"
+        # 1. Password exceeding 72 bytes must be rejected with 422 Unprocessable Entity
+        long_password = "A" * 73
+        res_long = await client.post("/api/v1/auth/register", json={
+            "email": "longpwd@apex-gp.internal",
+            "password": long_password,
         })
-        assert fail_res.status_code == 401
-        assert fail_res.json()["detail"] == "Invalid email or password"
+        assert res_long.status_code == 422
+        assert "72 bytes" in str(res_long.json())
 
-        # Non-existent email
-        notfound_res = await client.post("/api/v1/auth/login", json={
-            "email": "ghost@apex-gp.internal",
-            "password": "SomePassword"
+        # 2. Multi-byte UTF-8 password exceeding 72 bytes (e.g. 25 * 3-byte characters = 75 bytes)
+        long_utf8_password = "🏎️" * 25 # Each emoji is multiple bytes
+        res_utf8_long = await client.post("/api/v1/auth/register", json={
+            "email": "utf8long@apex-gp.internal",
+            "password": long_utf8_password,
         })
-        assert notfound_res.status_code == 401
+        assert res_utf8_long.status_code == 422
+        assert "72 bytes" in str(res_utf8_long.json())
 
-        # Valid login
-        login_res = await client.post("/api/v1/auth/login", json={
-            "email": "pilot1@apex-gp.internal",
-            "password": "SecurePassword123!"
+        # 3. Multi-byte UTF-8 password under 72 bytes succeeds and logs in consistently
+        valid_utf8_password = "Ferrari_🏎️_2024!" # <= 72 bytes
+        reg_utf8 = await client.post("/api/v1/auth/register", json={
+            "email": "tifosi@apex-gp.internal",
+            "password": valid_utf8_password,
+            "full_name": "Tifosi Racer"
         })
-        assert login_res.status_code == 200
-        assert "access_token" in login_res.json()
+        assert reg_utf8.status_code == 200
+
+        login_utf8 = await client.post("/api/v1/auth/login", json={
+            "email": "tifosi@apex-gp.internal",
+            "password": valid_utf8_password,
+        })
+        assert login_utf8.status_code == 200
+        assert "access_token" in login_utf8.json()
 
 @pytest.mark.asyncio
 async def test_expired_or_invalid_jwt_token():

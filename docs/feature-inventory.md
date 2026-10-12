@@ -1,7 +1,7 @@
 # APEX GP — Complete Feature Inventory & Master Traceability Matrix
 
 > **Document Status:** LIVING / AUTHORITATIVE  
-> **Last Updated:** 2026-10-12 (Post-Release 1.1 Stabilization)  
+> **Last Updated:** 2026-10-12 (Post-Release 1.1.1 Targeted Correctness Patch)  
 > **Master Rule:** No feature from the master specification may be omitted, simplified into a placeholder, or marked complete without verified tests and working code.
 
 ---

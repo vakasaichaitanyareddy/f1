@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import List, Optional
 from datetime import datetime
 from app.racing.models import DataStateEnum, SessionTypeEnum, SessionStatusEnum
@@ -108,9 +108,27 @@ class UserCreate(BaseModel):
     password: str
     full_name: Optional[str] = None
 
+    @field_validator("password")
+    @classmethod
+    def validate_password_bytes(cls, v: str) -> str:
+        byte_len = len(v.encode("utf-8"))
+        if byte_len < 8:
+            raise ValueError("Password must be at least 8 bytes long")
+        if byte_len > 72:
+            raise ValueError(f"Password exceeds maximum supported length of 72 bytes (received {byte_len} bytes)")
+        return v
+
 class UserLogin(BaseModel):
     email: str
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_bytes(cls, v: str) -> str:
+        byte_len = len(v.encode("utf-8"))
+        if byte_len > 72:
+            raise ValueError(f"Password exceeds maximum supported length of 72 bytes (received {byte_len} bytes)")
+        return v
 
 class UserProfile(BaseModel):
     id: str
