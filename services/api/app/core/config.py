@@ -1,3 +1,4 @@
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -22,8 +23,6 @@ class Settings(BaseSettings):
     OPENF1_BASE_URL: str = "https://api.openf1.org/v1"
     JOLPICA_BASE_URL: str = "https://api.jolpi.ca/ergast/f1"
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = ConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

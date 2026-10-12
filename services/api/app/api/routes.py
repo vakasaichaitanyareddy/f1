@@ -263,7 +263,9 @@ async def get_session_classification(session_id: str, db: AsyncSession = Depends
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    meeting = (await db.execute(select(MeetingModel).where(MeetingModel.id == session.meeting_id))).scalar_one()
+    from sqlalchemy.orm import selectinload
+    meeting_stmt = select(MeetingModel).options(selectinload(MeetingModel.sessions)).where(MeetingModel.id == session.meeting_id)
+    meeting = (await db.execute(meeting_stmt)).scalar_one()
 
     # Get results
     results_stmt = (
@@ -298,10 +300,12 @@ async def get_session_classification(session_id: str, db: AsyncSession = Depends
         session_type=session.type,
         results=entries,
         provenance=ProvenanceMeta(
-            source="FIA_OFFICIAL_CLASSIFICATION",
+            source="FIA_OFFICIAL_CLASSIFICATION_ARCHIVE",
             retrieved_at=datetime.now(timezone.utc),
             data_state=DataStateEnum.HISTORICAL,
             verified=True,
+            is_test_fixture=True,
+            notes="Development seed baseline (Bahrain GP 2024 archive). Not live timing."
         )
     )
 
@@ -354,6 +358,8 @@ async def get_championship_intelligence(
             "source": "APEX_GP_CHAMPIONSHIP_MATH_ENGINE",
             "retrieved_at": datetime.now(timezone.utc).isoformat(),
             "data_state": "HISTORICAL",
-            "verified": True
+            "verified": True,
+            "is_test_fixture": True,
+            "notes": "Calculated over 2024 development seed baseline."
         }
     }

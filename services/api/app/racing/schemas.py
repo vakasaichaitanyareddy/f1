@@ -8,6 +8,8 @@ class ProvenanceMeta(BaseModel):
     retrieved_at: datetime
     data_state: DataStateEnum
     verified: bool
+    is_test_fixture: bool = False
+    notes: Optional[str] = None
 
 class ConstructorBase(BaseModel):
     id: str

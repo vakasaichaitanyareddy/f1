@@ -128,7 +128,7 @@ export default function Home() {
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2 text-xs text-[#8F96A3] bg-[#0D0E12] px-3 py-1.5 rounded border border-[#272A35]">
             <span className="w-2 h-2 rounded-full bg-[#64D2FF]"></span>
-            <span>DATA: FIA VERIFIED (HISTORICAL)</span>
+            <span>DATA: FIA ARCHIVE (DEV FIXTURE)</span>
           </div>
 
           {/* Spoiler Shield Toggle */}
@@ -156,7 +156,7 @@ export default function Home() {
             <div>
               <div className="flex items-center space-x-2 text-xs text-[#E10600] font-bold uppercase tracking-wider mb-1">
                 <Flag className="w-4 h-4" />
-                <span>ROUND 1 OF 24 • COMPLETED</span>
+                <span>ROUND 1 OF 24 • COMPLETED [TEST DATA FIXTURE]</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold text-white">
                 Formula 1 Gulf Air Bahrain Grand Prix 2024

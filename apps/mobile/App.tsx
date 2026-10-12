@@ -30,7 +30,7 @@ export default function App() {
 
       <ScrollView style={styles.content}>
         <View style={styles.card}>
-          <Text style={styles.cardHeader}>ROUND 1 • COMPLETED</Text>
+          <Text style={styles.cardHeader}>ROUND 1 • COMPLETED [TEST DATA FIXTURE]</Text>
           <Text style={styles.cardTitle}>Bahrain Grand Prix 2024</Text>
           <Text style={styles.cardSubtitle}>Sakhir • 57 Laps • Fastest Lap: 1:32.608 (VER)</Text>
         </View>
