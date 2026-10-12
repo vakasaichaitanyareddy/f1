@@ -4,7 +4,7 @@ services:
       context: ./services/api
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - ENVIRONMENT=development
       - DATABASE_URL=postgresql+asyncpg://apex_user:apex_password@postgres:5432/apex_gp
