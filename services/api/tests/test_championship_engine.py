@@ -159,3 +159,98 @@ def test_mathematical_elimination_and_clinch():
     clinched, gap = calculate_clinch_threshold(400, 320, remaining_gps=3, remaining_sprints=0, season=2024)
     assert clinched is True
     assert gap == 80.0
+
+# 11. 2014 Double Points Season Finale (Article 6.4 of 2014 FIA Sporting Regulations)
+def test_2014_double_points_season_finale():
+    # Ordinary 2014 GP (Rounds 1-18) awards standard 25-18-15-12-10-8-6-4-2-1
+    assert calculate_grand_prix_points(1, season=2014, is_final_event=False) == 25.0
+    assert calculate_grand_prix_points(2, season=2014, is_final_event=False) == 18.0
+    assert calculate_grand_prix_points(10, season=2014, is_final_event=False) == 1.0
+
+    # 2014 Final Event (Abu Dhabi GP) awards double points: P1=50, P2=36, P3=30, P4=24, P5=20, P6=16, P7=12, P8=8, P9=4, P10=2
+    assert calculate_grand_prix_points(1, season=2014, is_final_event=True) == 50.0
+    assert calculate_grand_prix_points(2, season=2014, is_final_event=True) == 36.0
+    assert calculate_grand_prix_points(3, season=2014, is_final_event=True) == 30.0
+    assert calculate_grand_prix_points(4, season=2014, is_final_event=True) == 24.0
+    assert calculate_grand_prix_points(5, season=2014, is_final_event=True) == 20.0
+    assert calculate_grand_prix_points(6, season=2014, is_final_event=True) == 16.0
+    assert calculate_grand_prix_points(7, season=2014, is_final_event=True) == 12.0
+    assert calculate_grand_prix_points(8, season=2014, is_final_event=True) == 8.0
+    assert calculate_grand_prix_points(9, season=2014, is_final_event=True) == 4.0
+    assert calculate_grand_prix_points(10, season=2014, is_final_event=True) == 2.0
+    assert calculate_grand_prix_points(11, season=2014, is_final_event=True) == 0.0
+
+    # Ensure other seasons do not erroneously trigger double points
+    assert calculate_grand_prix_points(1, season=2024, is_final_event=True) == 25.0
+    assert calculate_grand_prix_points(1, season=2013, is_final_event=True) == 25.0
+
+    # Max remaining points with 2014 finale included:
+    # If 1 GP remaining in 2014 and it's the finale: 50 pts (driver) or 50 + 36 = 86 pts (constructor)
+    assert calculate_max_remaining_points(1, 0, season=2014, is_constructor=False, final_event_included=True) == 50.0
+    assert calculate_max_remaining_points(1, 0, season=2014, is_constructor=True, final_event_included=True) == 86.0
+
+    # If 2 GPs remaining in 2014 (1 regular + 1 double finale): 25 + 50 = 75 pts (driver)
+    # Constructor: (25 + 18) + (50 + 36) = 43 + 86 = 129 pts
+    assert calculate_max_remaining_points(2, 0, season=2014, is_constructor=False, final_event_included=True) == 75.0
+    assert calculate_max_remaining_points(2, 0, season=2014, is_constructor=True, final_event_included=True) == 129.0
+
+# 12. 2019–2021 vs 2022–2024 Fastest Lap Distance Distinction
+def test_fastest_lap_era_distinction_2019_2021_vs_2022_2024():
+    # In 2019-2021, the regulations awarded FL point to top 10 finisher if points were awarded,
+    # without the post-Spa 2021 50% distance condition.
+    # E.g. at 40% race distance:
+    # 2020: FL point is eligible (as top 10 finished in a shortened race awarding half-points)
+    assert is_fastest_lap_eligible(1, season=2020, distance_completed_ratio=0.40) is True
+    # Half points for P1 in 2020 = 12.5 + 1.0 (FL) = 13.5 pts
+    assert calculate_grand_prix_points(1, fastest_lap=True, season=2020, distance_completed_ratio=0.40) == 13.5
+
+    # 2023: Under modern Article 6.4, leader must complete >= 50% distance for FL point to be awarded.
+    # At 40% distance (<50% band), Column 2 applies (P1 base = 13 pts), but FL is INELIGIBLE
+    assert is_fastest_lap_eligible(1, season=2023, distance_completed_ratio=0.40) is False
+    assert calculate_grand_prix_points(1, fastest_lap=True, season=2023, distance_completed_ratio=0.40) == 13.0
+
+# 13. Dead-Heat Tied Finishes and Split Points
+def test_dead_heat_shared_points():
+    from app.championship.engine import calculate_shared_points
+
+    # Modern era: 2 drivers dead-heat for P1 (tied across P1 and P2)
+    # Points for P1 (25) + P2 (18) = 43 pts / 2 = 21.5 pts each
+    assert calculate_shared_points([1, 2], season=2024) == 21.5
+
+    # 3 drivers tie across P3, P4, P5
+    # P3 (15) + P4 (12) + P5 (10) = 37 pts / 3 = 12.3333... pts each
+    shared_3way = calculate_shared_points([3, 4, 5], season=2024)
+    assert abs(shared_3way - (37.0 / 3.0)) < 1e-6
+
+    # 2014 Finale dead-heat for P1 (tied across P1 and P2)
+    # P1 (50) + P2 (36) = 86 pts / 2 = 43.0 pts each
+    assert calculate_shared_points([1, 2], season=2014, is_final_event=True) == 43.0
+
+# 14. Constructor Maximum Capacity (2 cars per team)
+def test_constructor_max_capacity():
+    # 2024: 1 GP = P1 (25) + P2 (18) + FL (1) = 44 pts
+    # 1 Sprint = P1 (8) + P2 (7) = 15 pts
+    assert calculate_max_remaining_points(1, 1, season=2024, is_constructor=True) == 59.0
+
+    # 2025: 1 GP = P1 (25) + P2 (18) = 43 pts (no FL)
+    # 1 Sprint = 15 pts
+    assert calculate_max_remaining_points(1, 1, season=2025, is_constructor=True) == 58.0
+
+# 15. Countback Distinction Between Grand Prix and Sprint Race Wins
+def test_countback_sprint_vs_grand_prix():
+    # Competitor A: 2 Grand Prix wins, 0 GP P2s, 5 Sprint wins
+    # Competitor B: 3 Grand Prix wins, 0 GP P2s, 0 Sprint wins
+    # Under FIA Article 7.2, Competitor B wins the countback because Grand Prix wins take precedence!
+    gp_a = [1, 1, 3]
+    gp_b = [1, 1, 1]
+    sprints_a = [1, 1, 1, 1, 1]
+    sprints_b = [2, 2, 2, 2, 2]
+
+    # B wins based on GP finishing positions despite A having 5 sprint wins
+    assert evaluate_fia_countback(gp_a, gp_b, sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b) == -1
+
+    # If GP finishes are identical, sprint finishes break the tie
+    gp_tied_a = [1, 1, 2]
+    gp_tied_b = [1, 1, 2]
+    assert evaluate_fia_countback(gp_tied_a, gp_tied_b, sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b) == 1
+

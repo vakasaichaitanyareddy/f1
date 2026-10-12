@@ -21,49 +21,71 @@ REGULATION_PROVENANCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "season_range": "2025+",
         "fia_document": "FIA Formula One World Championship Sporting Regulations",
         "document_version": "2025 Issue 1 (WMSC ratified Oct 17, 2024)",
+        "source_url": "https://www.fia.com/regulation/category/110",
         "source_reference": "Article 6.4 (Fastest lap bonus point rescinded), Article 6.5 (Points scales)",
         "fl_bonus_active": False,
         "fl_distance_threshold": None,
+        "double_points_final_round": False,
     },
     "2022_2024": {
         "season_range": "2022-2024",
         "fia_document": "FIA Formula One World Championship Sporting Regulations",
         "document_version": "2022-2024 Editions (Post-Spa 2021 graduated scale overhaul)",
+        "source_url": "https://www.fia.com/regulation/category/110",
         "source_reference": "Article 6.4 (FL bonus point: top 10 & leader completed >=50% distance), Article 6.5 (Columns 1-4 points)",
         "fl_bonus_active": True,
         "fl_distance_threshold": 0.50,
+        "double_points_final_round": False,
     },
     "2019_2021": {
         "season_range": "2019-2021",
         "fia_document": "FIA Formula One World Championship Sporting Regulations",
         "document_version": "2019-2021 Editions (FL re-introduced by WMSC in March 2019)",
-        "source_reference": "Article 6.4 (FL bonus point: top 10 & leader completed >=50% distance), Half-points for <75%",
+        "source_url": "https://www.fia.com/regulation/category/110",
+        "source_reference": "Article 6.4 (FL bonus point: top 10 finisher in a race awarding points; no 50% distance restriction), Article 6.5 (Half-points for <75%)",
         "fl_bonus_active": True,
-        "fl_distance_threshold": 0.50,
+        "fl_distance_threshold": None,  # No distance percentage restriction in 2019-2021
+        "double_points_final_round": False,
     },
-    "2010_2018": {
-        "season_range": "2010-2018",
-        "fia_document": "FIA Formula One World Championship Sporting Regulations",
-        "document_version": "2010 Edition (Modern 25-18-15-12-10-8-6-4-2-1 system introduced)",
-        "source_reference": "Article 6.4 (No fastest lap bonus point)",
+    "2014": {
+        "season_range": "2014",
+        "fia_document": "2014 Formula One Sporting Regulations",
+        "document_version": "2014 Published by FIA (WMSC approved Dec 2013)",
+        "source_url": "https://www.fia.com/regulation/category/110",
+        "source_reference": "Article 6.4 (Double points awarded for the final Competition of the Championship: Abu Dhabi GP)",
         "fl_bonus_active": False,
         "fl_distance_threshold": None,
+        "double_points_final_round": True,
+    },
+    "2010_2018": {
+        "season_range": "2010-2018 (excl 2014 finale)",
+        "fia_document": "FIA Formula One World Championship Sporting Regulations",
+        "document_version": "2010-2018 Editions (Modern 25-18-15-12-10-8-6-4-2-1 scale introduced)",
+        "source_url": "https://www.fia.com/regulation/category/110",
+        "source_reference": "Article 6.4 (Top 10 scoring: 25-18-15-12-10-8-6-4-2-1; no FL bonus point)",
+        "fl_bonus_active": False,
+        "fl_distance_threshold": None,
+        "double_points_final_round": False,
     },
     "2003_2009": {
         "season_range": "2003-2009",
         "fia_document": "FIA Formula One World Championship Sporting Regulations",
         "document_version": "2003-2009 Editions",
+        "source_url": "https://www.fia.com/regulation/category/110",
         "source_reference": "Article 6.4 (10-8-6-5-4-3-2-1 point allocation, no FL point)",
         "fl_bonus_active": False,
         "fl_distance_threshold": None,
+        "double_points_final_round": False,
     },
     "1991_2002": {
         "season_range": "1991-2002",
         "fia_document": "FIA Formula One World Championship Sporting Regulations",
         "document_version": "1991-2002 Editions",
-        "source_reference": "10-6-4-3-2-1 point allocation (no FL point)",
+        "source_url": "https://www.fia.com/regulation/category/110",
+        "source_reference": "10-6-4-3-2-1 point allocation (all rounds count from 1991 onward; no FL point)",
         "fl_bonus_active": False,
         "fl_distance_threshold": None,
+        "double_points_final_round": False,
     },
 }
 
@@ -169,6 +191,8 @@ def get_regulation_provenance(season: int) -> Dict[str, Any]:
         return REGULATION_PROVENANCE_REGISTRY["2022_2024"]
     elif season >= 2019:
         return REGULATION_PROVENANCE_REGISTRY["2019_2021"]
+    elif season == 2014:
+        return REGULATION_PROVENANCE_REGISTRY["2014"]
     elif season >= 2010:
         return REGULATION_PROVENANCE_REGISTRY["2010_2018"]
     elif season >= 2003:
@@ -183,23 +207,31 @@ def is_fastest_lap_eligible(
 ) -> bool:
     """
     Evaluates whether the fastest-lap bonus point is eligible according to official FIA regulations:
-    - 2019–2024: Driver must finish in the top 10 (1 <= position <= 10) AND leader must have completed
+    - 2025 onward: No fastest-lap bonus point under any circumstances (Article 6.4 amended Oct 2024).
+    - 2022–2024: Driver must finish in top 10 (1 <= position <= 10) AND leader must have completed
       at least 50% of the scheduled race distance (distance_completed_ratio >= 0.50).
-      Specifically, it applies both for full-distance races (>=75%) AND shortened races in the
-      50% to <75% distance band (Column 3 of Article 6.5).
-      It is ineligible if distance is strictly < 50% (Columns 1 & 2 of Article 6.5, or <50% in 2019-2021).
-    - 2025 onward: No fastest-lap bonus point under any circumstances (Article 6.4 amended).
-    - Prior to 2019: No fastest-lap bonus point (except historical 1950–1959 which used different scales).
+      Specifically applies for full distance (>=75%) and the 50%–<75% band (Column 3 of Article 6.5).
+      Ineligible if distance is strictly < 50% (Columns 1 & 2 of Article 6.5).
+    - 2019–2021: Driver must finish in top 10 (1 <= position <= 10) in a race where points are awarded.
+      The pre-2022 regulations did not contain the 50% distance threshold introduced post-Spa 2021.
+    - Prior to 2019 (1991–2018): No fastest-lap bonus point in official regulations.
     """
     if season >= 2025:
         return False
 
-    if 2019 <= season <= 2024:
-        # Must finish in top 10
+    if 2022 <= season <= 2024:
         if not (1 <= position <= 10):
             return False
         # Leader must complete >= 50% of scheduled race distance (Article 6.4)
         if distance_completed_ratio < 0.50:
+            return False
+        return True
+
+    if 2019 <= season <= 2021:
+        if not (1 <= position <= 10):
+            return False
+        # In 2019-2021, points were awarded if race ran > 2 laps (even if halved)
+        if distance_completed_ratio <= 0.0:
             return False
         return True
 
@@ -211,14 +243,16 @@ def calculate_grand_prix_points(
     season: int = 2024,
     distance_completed_ratio: float = 1.0,
     penalty_points_deduction: float = 0.0,
+    is_final_event: bool = False,
 ) -> float:
     """
     Computes points awarded for a Grand Prix finish according to season and FIA regulations.
     Supports:
     - Full distance (>= 75%)
-    - Shortened races (Article 6.5 graduated points: <25%, 25%–<50%, 50%–<75%)
-    - Half-points rule for historical seasons (pre-2022 <75% rule)
-    - Fastest lap bonus point eligibility (2019–2024: top 10 & >=50% distance; 2025+: rescinded)
+    - Shortened races (Post-2021 Article 6.5 graduated points: <25%, 25%–<50%, 50%–<75%)
+    - Half-points rule for historical seasons (pre-2022 <75% distance rule)
+    - 2014 season finale double-points rule (Article 6.4 of 2014 FIA Sporting Regulations)
+    - Fastest lap bonus point eligibility (2019–2021 top 10; 2022–2024 top 10 & >=50% distance; 2025+ rescinded)
     - Penalty deductions (non-negative floor)
     """
     if position < 1:
@@ -257,13 +291,44 @@ def calculate_grand_prix_points(
         else:
             base = ERA_1991_2002_POINTS.get(position, 0.0)
 
-    # 2. Fastest Lap Bonus Point Applicability
+    # 2. 2014 Double-Points Exception (Article 6.4 of 2014 Sporting Regulations)
+    # Applies strictly to the final event of the 2014 Championship (Round 19 Abu Dhabi GP)
+    if season == 2014 and is_final_event:
+        base *= 2.0
+
+    # 3. Fastest Lap Bonus Point Applicability
     fl_awarded = 0.0
     if fastest_lap and is_fastest_lap_eligible(position, season=season, distance_completed_ratio=distance_completed_ratio):
         fl_awarded = FASTEST_LAP_POINT
 
     total = base + fl_awarded - penalty_points_deduction
     return max(0.0, total)
+
+def calculate_shared_points(
+    positions: List[int],
+    season: int = 2024,
+    distance_completed_ratio: float = 1.0,
+    is_final_event: bool = False,
+) -> float:
+    """
+    Computes shared points for dead-heat finishes where multiple drivers tie for position(s).
+    According to FIA regulations and historical precedent (e.g. dead heat across positions N to N+k-1),
+    the points for all tied positions are summed and divided equally among the tied competitors.
+    Returns the points awarded to each tied driver.
+    """
+    if not positions:
+        return 0.0
+    total_pts = sum(
+        calculate_grand_prix_points(
+            pos,
+            fastest_lap=False,
+            season=season,
+            distance_completed_ratio=distance_completed_ratio,
+            is_final_event=is_final_event,
+        )
+        for pos in positions
+    )
+    return total_pts / float(len(positions))
 
 def calculate_sprint_points(position: int, season: int = 2024) -> float:
     """Computes points awarded for a Sprint session according to season regulations."""
@@ -277,30 +342,77 @@ def calculate_max_remaining_points(
     remaining_gps: int,
     remaining_sprints: int = 0,
     season: int = 2024,
+    is_constructor: bool = False,
+    final_event_included: bool = True,
 ) -> float:
     """
-    Maximum points a single driver could mathematically score in the remainder of the season.
-    - 2019-2024: 25 (win) + 1 (FL) = 26 pts per GP + 8 pts per Sprint.
-    - 2025 onward: 25 (win) + 0 (FL rescinded) = 25 pts per GP + 8 pts per Sprint.
+    Maximum points a single driver or constructor could mathematically score in the remainder of the season.
+    - Driver 2019-2024: 25 (win) + 1 (FL) = 26 pts per GP + 8 pts per Sprint.
+    - Driver 2025 onward: 25 (win) + 0 (FL rescinded) = 25 pts per GP + 8 pts per Sprint.
+    - Constructor 2019-2024: 25 + 18 + 1 (FL) = 44 pts per GP + (8 + 7) = 15 pts per Sprint (2 cars score).
+    - Constructor 2025 onward: 25 + 18 = 43 pts per GP + 15 pts per Sprint.
+    - 2014 Double Points: If season == 2014 and final_event_included, the final GP awards double base points
+      (Driver: 50 pts; Constructor: 50 + 36 = 86 pts).
     """
-    fl_potential = 1.0 if (2019 <= season <= 2024) else 0.0
-    gp_max = MODERN_GP_POINTS[1] + fl_potential if season >= 2010 else ERA_2003_2009_POINTS[1]
-    sprint_max = 8.0 if season >= 2022 else (3.0 if season == 2021 else 0.0)
+    if remaining_gps <= 0 and remaining_sprints <= 0:
+        return 0.0
 
-    return (remaining_gps * gp_max) + (remaining_sprints * sprint_max)
+    if not is_constructor:
+        # Single Driver scoring capacity
+        fl_potential = 1.0 if (2019 <= season <= 2024) else 0.0
+        standard_gp_win = MODERN_GP_POINTS[1] if season >= 2010 else ERA_2003_2009_POINTS[1]
+        standard_gp_max = standard_gp_win + fl_potential
+        sprint_max = 8.0 if season >= 2022 else (3.0 if season == 2021 else 0.0)
+
+        if season == 2014 and final_event_included and remaining_gps > 0:
+            final_gp_max = (standard_gp_win * 2.0) + fl_potential
+            gp_total = final_gp_max + ((remaining_gps - 1) * standard_gp_max)
+        else:
+            gp_total = remaining_gps * standard_gp_max
+
+        return gp_total + (remaining_sprints * sprint_max)
+    else:
+        # Constructor scoring capacity (up to 2 cars per team)
+        fl_potential = 1.0 if (2019 <= season <= 2024) else 0.0
+        if season >= 2010:
+            standard_c_gp = MODERN_GP_POINTS[1] + MODERN_GP_POINTS[2] + fl_potential
+        elif season >= 2003:
+            standard_c_gp = ERA_2003_2009_POINTS[1] + ERA_2003_2009_POINTS[2]
+        else:
+            standard_c_gp = ERA_1991_2002_POINTS[1] + ERA_1991_2002_POINTS[2]
+
+        if season >= 2022:
+            sprint_c_max = SPRINT_POINTS_2022_PRESENT[1] + SPRINT_POINTS_2022_PRESENT[2]  # 8 + 7 = 15
+        elif season == 2021:
+            sprint_c_max = SPRINT_POINTS_2021[1] + SPRINT_POINTS_2021[2]  # 3 + 2 = 5
+        else:
+            sprint_c_max = 0.0
+
+        if season == 2014 and final_event_included and remaining_gps > 0:
+            final_c_gp = (MODERN_GP_POINTS[1] * 2.0) + (MODERN_GP_POINTS[2] * 2.0) + fl_potential  # 50 + 36 = 86
+            gp_total = final_c_gp + ((remaining_gps - 1) * standard_c_gp)
+        else:
+            gp_total = remaining_gps * standard_c_gp
+
+        return gp_total + (remaining_sprints * sprint_c_max)
 
 def evaluate_fia_countback(
     finishes_a: List[int],
     finishes_b: List[int],
-    max_position: int = 24
+    max_position: int = 24,
+    sprint_finishes_a: Optional[List[int]] = None,
+    sprint_finishes_b: Optional[List[int]] = None,
 ) -> int:
     """
     Evaluates FIA countback rule for tied championship points (Article 7.2 of Sporting Regulations):
-    Compares number of 1st places, then 2nd places, then 3rd places, etc.
+    Compares number of Grand Prix 1st places, then 2nd places, then 3rd places, etc.
+    Under FIA Sporting Regulations Article 7.2, Sprint race results are NOT included in Grand Prix
+    race countbacks; they are considered only if full GP finishing positions are completely identical
+    or under explicit session criteria.
     Returns:
-       1 if driver A finishes ahead
-      -1 if driver B finishes ahead
-       0 if completely tied on all countback criteria
+       1 if competitor A finishes ahead
+      -1 if competitor B finishes ahead
+       0 if completely tied on all countback criteria (FIA discretion / qualification criteria)
     """
     counts_a = {pos: finishes_a.count(pos) for pos in range(1, max_position + 1)}
     counts_b = {pos: finishes_b.count(pos) for pos in range(1, max_position + 1)}
@@ -310,6 +422,16 @@ def evaluate_fia_countback(
             return 1
         elif counts_b[pos] > counts_a[pos]:
             return -1
+
+    # Secondary tie-breaker: Sprint finishes if provided
+    if sprint_finishes_a is not None and sprint_finishes_b is not None:
+        s_counts_a = {pos: sprint_finishes_a.count(pos) for pos in range(1, max_position + 1)}
+        s_counts_b = {pos: sprint_finishes_b.count(pos) for pos in range(1, max_position + 1)}
+        for pos in range(1, max_position + 1):
+            if s_counts_a[pos] > s_counts_b[pos]:
+                return 1
+            elif s_counts_b[pos] > s_counts_a[pos]:
+                return -1
 
     return 0
 
@@ -321,13 +443,21 @@ def is_mathematically_eliminated(
     driver_finishes: Optional[List[int]] = None,
     leader_finishes: Optional[List[int]] = None,
     season: int = 2024,
+    is_constructor: bool = False,
+    final_event_included: bool = True,
 ) -> bool:
     """
-    Determines if a driver is mathematically eliminated from the championship.
-    A driver is strictly eliminated if their maximum achievable points < leader's current points.
+    Determines if a competitor is mathematically eliminated from the championship.
+    A competitor is strictly eliminated if their maximum achievable points < leader's current points.
     If maximum achievable points == leader's points, FIA countback decides if title is achievable.
     """
-    max_possible = driver_points + calculate_max_remaining_points(remaining_gps, remaining_sprints, season=season)
+    max_possible = driver_points + calculate_max_remaining_points(
+        remaining_gps,
+        remaining_sprints,
+        season=season,
+        is_constructor=is_constructor,
+        final_event_included=final_event_included,
+    )
     if max_possible < leader_points:
         return True
 
@@ -348,6 +478,8 @@ def calculate_clinch_threshold(
     leader_finishes: Optional[List[int]] = None,
     p2_finishes: Optional[List[int]] = None,
     season: int = 2024,
+    is_constructor: bool = False,
+    final_event_included: bool = True,
 ) -> Tuple[bool, float]:
     """
     Returns (is_clinched, lead_gap):
@@ -356,7 +488,13 @@ def calculate_clinch_threshold(
     2. lead_gap == max_remaining_points for P2, AND P2 cannot win on countback even if P2 wins all remaining sessions.
     """
     lead_gap = leader_points - p2_points
-    max_p2_capacity = calculate_max_remaining_points(remaining_gps, remaining_sprints, season=season)
+    max_p2_capacity = calculate_max_remaining_points(
+        remaining_gps,
+        remaining_sprints,
+        season=season,
+        is_constructor=is_constructor,
+        final_event_included=final_event_included,
+    )
 
     if lead_gap > max_p2_capacity:
         return (True, lead_gap)

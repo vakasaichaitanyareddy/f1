@@ -1,7 +1,7 @@
 # APEX GP — Complete Feature Inventory & Master Traceability Matrix
 
 > **Document Status:** LIVING / AUTHORITATIVE  
-> **Last Updated:** 2026-10-12 (Post-Release 1.1.1 Targeted Correctness Patch)  
+> **Last Updated:** 2026-10-12 (Post-Release 1.1.2 Complete Scoring Rules Matrix & Audit)  
 > **Master Rule:** No feature from the master specification may be omitted, simplified into a placeholder, or marked complete without verified tests and working code.
 
 ---
@@ -148,8 +148,8 @@
 ### Module K & L: Verification, Testing & Release Governance
 | Feature ID | Name / Description | Release Target | Status | Dependencies | Verification Evidence & Criteria |
 |---|---|---|---|---|---|
-| L1-01 | Unit test suite for championship points and tie-breaking arithmetic | R1 | [DONE] | J3-01 | 10 unit tests in `test_championship_engine.py` (100% pass) |
-| L1-02 | Integration test suite for REST API endpoints and data validation | R1 | [DONE] | J3-01 | 12 integration tests in `test_api_endpoints.py` (100% pass) |
+| L1-01 | Unit test suite for championship points and tie-breaking arithmetic | R1 | [DONE] | J3-01 | 15 unit tests in `test_championship_engine.py` (100% pass covering 1991–2026 scales, 2014 double points, 2019-2021 vs 2022-2024 FL distance boundaries, dead heats, constructor capacity, and sprint countback separation) |
+| L1-02 | Integration test suite for REST API endpoints and data validation | R1 | [DONE] | J3-01 | 12 integration tests in `test_api_endpoints.py` (100% pass); total 27 automated tests passing |
 | L1-03 | Web e2e and accessibility audit (WCAG AA, dark/light contrast) | R1 | [DONE] | A1-03 | Next.js production build (`npm run build`) passing without errors |
 | N1-01 | Private Friends-Only Beta infrastructure & feedback tracking | R7 | [TODO] | All R1-R6 | 30-day stability verification plan documented |
 | P1-01 | Production deployment checklist, observability & runbooks | R8 | [TODO] | N1-01 | Gate criteria documented in `docs/release-checklist.md` |
