@@ -254,3 +254,123 @@ def test_countback_sprint_vs_grand_prix():
     gp_tied_b = [1, 1, 2]
     assert evaluate_fia_countback(gp_tied_a, gp_tied_b, sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b) == 1
 
+# 16. 2026 Grand Prix Scoring Gate (Section A, Issue 03, Article A2.2)
+def test_2026_grand_prix_consecutive_green_laps_gate():
+    # Case A: Insufficient consecutive green-flag laps (< 2 complete laps without SC/VSC)
+    # E.g. Race completed 30 laps, but safety car intervened constantly, maximum consecutive green laps was 1
+    # Under Section A, Article A2.2, NO championship points are awarded.
+    assert calculate_grand_prix_points(1, season=2026, distance_completed_ratio=0.80, consecutive_green_laps=1) == 0.0
+    assert calculate_grand_prix_points(2, season=2026, distance_completed_ratio=0.80, consecutive_green_laps=0) == 0.0
+    assert calculate_grand_prix_points(10, season=2026, distance_completed_ratio=0.80, consecutive_green_laps=1) == 0.0
+
+    # Case B: Exactly 2 consecutive green-flag laps completed without SC/VSC
+    # Gate is satisfied! Points awarded according to distance band.
+    # Full distance: P1 = 25.0
+    assert calculate_grand_prix_points(1, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=2) == 25.0
+    # 50%-75% band: P1 = 19.0
+    assert calculate_grand_prix_points(1, season=2026, distance_completed_ratio=0.60, consecutive_green_laps=2) == 19.0
+    # 25%-50% band: P1 = 13.0
+    assert calculate_grand_prix_points(1, season=2026, distance_completed_ratio=0.40, consecutive_green_laps=2) == 13.0
+    # <25% band: P1 = 6.0
+    assert calculate_grand_prix_points(1, season=2026, distance_completed_ratio=0.20, consecutive_green_laps=2) == 6.0
+
+    # More than 2 consecutive green laps (e.g. 10 laps)
+    assert calculate_grand_prix_points(1, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 25.0
+
+    # Earlier seasons (e.g. 2024, 2025) do not enforce this specific 2026 gate if not provided or legacy
+    assert calculate_grand_prix_points(1, season=2024, distance_completed_ratio=1.0, consecutive_green_laps=1) == 25.0
+
+# 17. 2026 Sprint Scoring Gate (Section A, Issue 03, Article A2.2)
+def test_2026_sprint_scoring_gates():
+    # Sprint Condition 1: Must complete at least 2 consecutive green-flag laps without SC/VSC
+    # Case A: 1 consecutive lap -> NO sprint points
+    assert calculate_sprint_points(1, season=2026, distance_completed_ratio=0.75, consecutive_green_laps=1) == 0.0
+
+    # Sprint Condition 2: Must complete at least 50% of scheduled sprint distance
+    # Case B: Immediately below 50% distance (e.g. 49.9% or 45%) even with >=2 green laps -> NO points
+    assert calculate_sprint_points(1, season=2026, distance_completed_ratio=0.499, consecutive_green_laps=5) == 0.0
+    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=0.45, consecutive_green_laps=3) == 0.0
+
+    # Case C: Exactly 50% distance (0.50) with exactly 2 consecutive green laps -> POINTS AWARDED!
+    # P1 = 8.0, P2 = 7.0, P8 = 1.0, P9 = 0.0
+    assert calculate_sprint_points(1, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 8.0
+    assert calculate_sprint_points(2, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 7.0
+    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 1.0
+    assert calculate_sprint_points(9, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 0.0
+
+    # Case D: Full sprint distance (100%) with 10 green laps
+    assert calculate_sprint_points(1, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 8.0
+
+# 18. 2026 Championship Countback Fallback to Qualifying Results
+def test_2026_countback_qualifying_fallback():
+    # Both competitors have identical GP race results and sprint results:
+    # GP: [1, 2, 3] each
+    # Sprints: [1, 2] each
+    gp_finishes = [1, 2, 3]
+    sprint_finishes = [1, 2]
+
+    # Driver A: Qualifying [1, 1, 3] (two poles)
+    # Driver B: Qualifying [1, 2, 2] (one pole)
+    # Under 2026 Ruleset (Section A, Article A2.2), Driver A wins on qualifying countback!
+    assert evaluate_fia_countback(
+        gp_finishes,
+        gp_finishes,
+        sprint_finishes_a=sprint_finishes,
+        sprint_finishes_b=sprint_finishes,
+        qualifying_finishes_a=[1, 1, 3],
+        qualifying_finishes_b=[1, 2, 2],
+        season=2026,
+    ) == 1
+
+    # Conversely, Driver B has more qualifying 2nd places when poles are tied
+    assert evaluate_fia_countback(
+        gp_finishes,
+        gp_finishes,
+        sprint_finishes_a=sprint_finishes,
+        sprint_finishes_b=sprint_finishes,
+        qualifying_finishes_a=[1, 3, 3],
+        qualifying_finishes_b=[1, 2, 3],
+        season=2026,
+    ) == -1
+
+    # Completely tied on GP, Sprint, AND Qualifying results -> 0 (FIA discretion)
+    assert evaluate_fia_countback(
+        gp_finishes,
+        gp_finishes,
+        sprint_finishes_a=sprint_finishes,
+        sprint_finishes_b=sprint_finishes,
+        qualifying_finishes_a=[1, 2, 3],
+        qualifying_finishes_b=[1, 2, 3],
+        season=2026,
+    ) == 0
+
+    # In pre-2026 seasons (e.g. 2024), qualifying fallback was not an official statutory step
+    assert evaluate_fia_countback(
+        gp_finishes,
+        gp_finishes,
+        sprint_finishes_a=sprint_finishes,
+        sprint_finishes_b=sprint_finishes,
+        qualifying_finishes_a=[1, 1, 3],
+        qualifying_finishes_b=[1, 2, 2],
+        season=2024,
+    ) == 0
+
+# 19. 2026 Provenance Metadata Independence
+def test_2026_regulation_provenance_independence():
+    prov_2026 = get_regulation_provenance(2026)
+    prov_2025 = get_regulation_provenance(2025)
+
+    assert prov_2026["season_range"] == "2026"
+    assert "Section A, Issue 03" in prov_2026["document_version"]
+    assert "Article A2.2" in prov_2026["source_reference"]
+    assert prov_2026["consecutive_green_laps_required"] == 2
+    assert prov_2026["sprint_min_distance_ratio"] == 0.50
+    assert prov_2026["countback_qualifying_fallback"] is True
+
+    # 2025 retains distinct metadata
+    assert prov_2025["season_range"] == "2025"
+    assert "2025 Issue 1" in prov_2025["document_version"]
+    assert "Article 6.4" in prov_2025["source_reference"]
+    assert prov_2025["countback_qualifying_fallback"] is False
+
+

@@ -4,10 +4,12 @@ Pure mathematical evaluation of championship points, countbacks, eliminations,
 shortened race distance bands, penalty adjustments, and title clinching.
 
 FIA Regulation Provenance and Version Metadata:
-- 2025+ Sporting Regulations: Article 6.4/6.5 (Issue 1, published Oct 2024; Fastest-lap bonus point abolished)
+- 2026 Technical & Sporting Regulations: Section A, Issue 03, Article A2.2 & Section B, Issue 09 (Oct 1, 2026):
+  Points allocation, 2-consecutive green laps gate, sprint >=50% distance condition, and qualifying countback fallback.
+- 2025 Sporting Regulations: Article 6.4/6.5 (Issue 1, published Oct 17, 2024; Fastest-lap bonus point abolished)
 - 2022–2024 Sporting Regulations: Article 6.4 (Fastest-lap bonus point requiring >=50% distance completed & top 10 finish),
   Article 6.5 (Shortened race graduated point allocations: <25%, 25%–<50%, 50%–<75%)
-- 2019–2021 Sporting Regulations: Article 6.4 (Fastest-lap bonus point requiring >=50% distance completed & top 10 finish),
+- 2019–2021 Sporting Regulations: Article 6.4 (Fastest-lap bonus point requiring top 10 finish; no 50% distance condition),
   Half-points rule for races stopped between 2 laps and 75% distance
 - 2003–2009 Sporting Regulations: 10-8-6-5-4-3-2-1 scale (no FL bonus point)
 - 1991–2002 Sporting Regulations: 10-6-4-3-2-1 scale (no FL bonus point)
@@ -17,8 +19,21 @@ from typing import List, Dict, Tuple, Any, Optional
 
 # Regulation Provenance Registry mapping season/era to official FIA documents
 REGULATION_PROVENANCE_REGISTRY: Dict[str, Dict[str, Any]] = {
-    "2025_ONWARD": {
-        "season_range": "2025+",
+    "2026": {
+        "season_range": "2026",
+        "fia_document": "FIA Formula One World Championship Sporting Regulations — 2026 Technical & Sporting Regulations",
+        "document_version": "Section A, Issue 03 & Section B, Issue 09 (Published October 1, 2026)",
+        "source_url": "https://www.fia.com/regulation/category/110",
+        "source_reference": "Section A, Article A2.2 (Points allocation, 2-consecutive green-flag laps condition, sprint >=50% distance condition, and qualifying countback fallback)",
+        "fl_bonus_active": False,
+        "fl_distance_threshold": None,
+        "double_points_final_round": False,
+        "consecutive_green_laps_required": 2,
+        "sprint_min_distance_ratio": 0.50,
+        "countback_qualifying_fallback": True,
+    },
+    "2025": {
+        "season_range": "2025",
         "fia_document": "FIA Formula One World Championship Sporting Regulations",
         "document_version": "2025 Issue 1 (WMSC ratified Oct 17, 2024)",
         "source_url": "https://www.fia.com/regulation/category/110",
@@ -26,6 +41,9 @@ REGULATION_PROVENANCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "fl_bonus_active": False,
         "fl_distance_threshold": None,
         "double_points_final_round": False,
+        "consecutive_green_laps_required": None,
+        "sprint_min_distance_ratio": None,
+        "countback_qualifying_fallback": False,
     },
     "2022_2024": {
         "season_range": "2022-2024",
@@ -185,8 +203,10 @@ FASTEST_LAP_POINT = 1.0
 
 def get_regulation_provenance(season: int) -> Dict[str, Any]:
     """Returns official FIA regulatory source metadata and document citations for a given season."""
-    if season >= 2025:
-        return REGULATION_PROVENANCE_REGISTRY["2025_ONWARD"]
+    if season >= 2026:
+        return REGULATION_PROVENANCE_REGISTRY["2026"]
+    elif season == 2025:
+        return REGULATION_PROVENANCE_REGISTRY["2025"]
     elif season >= 2022:
         return REGULATION_PROVENANCE_REGISTRY["2022_2024"]
     elif season >= 2019:
@@ -244,10 +264,13 @@ def calculate_grand_prix_points(
     distance_completed_ratio: float = 1.0,
     penalty_points_deduction: float = 0.0,
     is_final_event: bool = False,
+    consecutive_green_laps: Optional[int] = None,
 ) -> float:
     """
     Computes points awarded for a Grand Prix finish according to season and FIA regulations.
     Supports:
+    - 2026 Ruleset (Section A, Issue 03, Article A2.2): No points awarded unless the leader has completed
+      at least two complete, consecutive laps without a Safety Car (SC) or Virtual Safety Car (VSC) procedure.
     - Full distance (>= 75%)
     - Shortened races (Post-2021 Article 6.5 graduated points: <25%, 25%–<50%, 50%–<75%)
     - Half-points rule for historical seasons (pre-2022 <75% distance rule)
@@ -256,6 +279,11 @@ def calculate_grand_prix_points(
     - Penalty deductions (non-negative floor)
     """
     if position < 1:
+        return 0.0
+
+    # 2026 Grand Prix Scoring Gate (Section A, Issue 03, Article A2.2)
+    # No championship points awarded if leader has not completed at least 2 consecutive laps without SC/VSC
+    if season >= 2026 and consecutive_green_laps is not None and consecutive_green_laps < 2:
         return 0.0
 
     # 1. Determine Base Finishing Position Points
@@ -330,8 +358,31 @@ def calculate_shared_points(
     )
     return total_pts / float(len(positions))
 
-def calculate_sprint_points(position: int, season: int = 2024) -> float:
-    """Computes points awarded for a Sprint session according to season regulations."""
+def calculate_sprint_points(
+    position: int,
+    season: int = 2024,
+    distance_completed_ratio: float = 1.0,
+    consecutive_green_laps: Optional[int] = None,
+) -> float:
+    """
+    Computes points awarded for a Sprint session according to season regulations.
+    - 2026 Ruleset (Section A, Issue 03, Article A2.2):
+      Sprint points are awarded only if:
+      1. Leader has completed at least two complete, consecutive laps without SC/VSC procedure, AND
+      2. At least 50% of scheduled sprint distance has been completed (distance_completed_ratio >= 0.50).
+    - 2022–2025: Top 8 (8 down to 1).
+    - 2021: Top 3 (3, 2, 1).
+    """
+    if position < 1:
+        return 0.0
+
+    # 2026 Sprint Scoring Gate (Section A, Issue 03, Article A2.2)
+    if season >= 2026:
+        if consecutive_green_laps is not None and consecutive_green_laps < 2:
+            return 0.0
+        if distance_completed_ratio < 0.50:
+            return 0.0
+
     if season == 2021:
         return SPRINT_POINTS_2021.get(position, 0.0)
     elif season >= 2022:
@@ -402,17 +453,23 @@ def evaluate_fia_countback(
     max_position: int = 24,
     sprint_finishes_a: Optional[List[int]] = None,
     sprint_finishes_b: Optional[List[int]] = None,
+    qualifying_finishes_a: Optional[List[int]] = None,
+    qualifying_finishes_b: Optional[List[int]] = None,
+    season: int = 2024,
 ) -> int:
     """
-    Evaluates FIA countback rule for tied championship points (Article 7.2 of Sporting Regulations):
-    Compares number of Grand Prix 1st places, then 2nd places, then 3rd places, etc.
-    Under FIA Sporting Regulations Article 7.2, Sprint race results are NOT included in Grand Prix
-    race countbacks; they are considered only if full GP finishing positions are completely identical
-    or under explicit session criteria.
+    Evaluates FIA countback rule for tied championship points:
+    1. Compares number of Grand Prix 1st places, then 2nd places, then 3rd places, etc.
+    2. Under FIA Sporting Regulations Article 7.2, Sprint race results are NOT included in Grand Prix
+       race countbacks; they are considered only as a secondary check if full GP finishing positions
+       are completely identical.
+    3. 2026 Ruleset (Section A, Issue 03, Article A2.2 & Section B, Issue 09, October 1, 2026):
+       If race results (and sprint results) cannot resolve a tie, countback falls back to Qualifying results
+       (comparing most 1st places / pole positions in qualifying, then 2nd, 3rd, etc.).
     Returns:
        1 if competitor A finishes ahead
       -1 if competitor B finishes ahead
-       0 if completely tied on all countback criteria (FIA discretion / qualification criteria)
+       0 if completely tied on all countback criteria (FIA discretion)
     """
     counts_a = {pos: finishes_a.count(pos) for pos in range(1, max_position + 1)}
     counts_b = {pos: finishes_b.count(pos) for pos in range(1, max_position + 1)}
@@ -433,6 +490,16 @@ def evaluate_fia_countback(
             elif s_counts_b[pos] > s_counts_a[pos]:
                 return -1
 
+    # Tertiary tie-breaker: 2026 Qualifying fallback (Section A, Article A2.2)
+    if season >= 2026 and qualifying_finishes_a is not None and qualifying_finishes_b is not None:
+        q_counts_a = {pos: qualifying_finishes_a.count(pos) for pos in range(1, max_position + 1)}
+        q_counts_b = {pos: qualifying_finishes_b.count(pos) for pos in range(1, max_position + 1)}
+        for pos in range(1, max_position + 1):
+            if q_counts_a[pos] > q_counts_b[pos]:
+                return 1
+            elif q_counts_b[pos] > q_counts_a[pos]:
+                return -1
+
     return 0
 
 def is_mathematically_eliminated(
@@ -445,6 +512,8 @@ def is_mathematically_eliminated(
     season: int = 2024,
     is_constructor: bool = False,
     final_event_included: bool = True,
+    driver_qualifying_finishes: Optional[List[int]] = None,
+    leader_qualifying_finishes: Optional[List[int]] = None,
 ) -> bool:
     """
     Determines if a competitor is mathematically eliminated from the championship.
@@ -464,7 +533,13 @@ def is_mathematically_eliminated(
     if max_possible == leader_points:
         if driver_finishes is not None and leader_finishes is not None:
             hypothetical_driver_finishes = list(driver_finishes) + [1] * remaining_gps
-            tie_result = evaluate_fia_countback(hypothetical_driver_finishes, leader_finishes)
+            tie_result = evaluate_fia_countback(
+                hypothetical_driver_finishes,
+                leader_finishes,
+                qualifying_finishes_a=driver_qualifying_finishes,
+                qualifying_finishes_b=leader_qualifying_finishes,
+                season=season,
+            )
             return tie_result < 0
         return False
 
@@ -480,6 +555,8 @@ def calculate_clinch_threshold(
     season: int = 2024,
     is_constructor: bool = False,
     final_event_included: bool = True,
+    leader_qualifying_finishes: Optional[List[int]] = None,
+    p2_qualifying_finishes: Optional[List[int]] = None,
 ) -> Tuple[bool, float]:
     """
     Returns (is_clinched, lead_gap):
@@ -502,7 +579,13 @@ def calculate_clinch_threshold(
     if lead_gap == max_p2_capacity:
         if leader_finishes is not None and p2_finishes is not None:
             hypothetical_p2_finishes = list(p2_finishes) + [1] * remaining_gps
-            tie_result = evaluate_fia_countback(leader_finishes, hypothetical_p2_finishes)
+            tie_result = evaluate_fia_countback(
+                leader_finishes,
+                hypothetical_p2_finishes,
+                qualifying_finishes_a=leader_qualifying_finishes,
+                qualifying_finishes_b=p2_qualifying_finishes,
+                season=season,
+            )
             if tie_result > 0:
                 return (True, lead_gap)
 
