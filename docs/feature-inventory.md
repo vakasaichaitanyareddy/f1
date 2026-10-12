@@ -1,7 +1,7 @@
 # APEX GP — Complete Feature Inventory & Master Traceability Matrix
 
 > **Document Status:** LIVING / AUTHORITATIVE  
-> **Last Updated:** 2026-10-12 (Post-v1.1.6 2026 Sprint Scoring Correction Verification)  
+> **Last Updated:** 2026-10-12 (Post-v1.1.7 Verified Sprint Scoring Correction & Downstream Audit)  
 > **Master Rule:** No feature from the master specification may be omitted, simplified into a placeholder, or marked complete without verified tests and working code.
 
 ---
@@ -148,7 +148,7 @@
 ### Module K & L: Verification, Testing & Release Governance
 | Feature ID | Name / Description | Release Target | Status | Dependencies | Verification Evidence & Criteria |
 |---|---|---|---|---|---|
-| L1-01 | Unit test suite for championship points and tie-breaking arithmetic | R1 | [DONE] | J3-01 | 24 unit tests in `test_championship_engine.py` (100% pass covering 1991–2026 scales, 2014 double points round metadata, 2019-2021 vs 2022-2024 FL distance boundaries, dead heats, constructor capacity, 2026 consecutive-laps GP gate & neutralization immunity, 2026 sprint distance gate & Article A2.2.2 Top 7 sprint scale 8-7-6-5-4-3-2 with P8=0, Section A Art A2.1.4(c) direct qualifying countback fallback, historical Article 7.2 GP-only countback with unresolved/FIA discretion outcome, exact integer lap distance thresholds, and typed context errors) |
+| L1-01 | Unit test suite for championship points and tie-breaking arithmetic | R1 | [DONE] | J3-01 | 24 unit tests in `test_championship_engine.py` (100% pass covering 1991–2026 scales, 2014 double points round metadata, 2019-2021 vs 2022-2024 FL distance boundaries, dead heats across GP and Sprint sessions including P8/P9 boundary ties, constructor capacity, 2026 consecutive-laps GP gate & neutralization immunity, 2026 sprint distance gate & Article A2.2.2 Top 8 sprint scale 8-7-6-5-4-3-2-1 with P8=1 and P9=0, Section A Art A2.1.4(c) direct qualifying countback fallback, historical Article 7.2 GP-only countback with unresolved/FIA discretion outcome, exact integer lap distance thresholds, and typed context errors) |
 | L1-02 | Integration test suite for REST API endpoints and data validation | R1 | [DONE] | J3-01 | 12 integration tests in `test_api_endpoints.py` (100% pass); total 36 automated tests passing |
 | L1-03 | Web e2e and accessibility audit (WCAG AA, dark/light contrast) | R1 | [DONE] | A1-03 | Next.js production build (`npm run build`) passing without errors |
 | N1-01 | Private Friends-Only Beta infrastructure & feedback tracking | R7 | [TODO] | All R1-R6 | 30-day stability verification plan documented |

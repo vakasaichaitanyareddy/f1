@@ -131,9 +131,9 @@ def test_sprint_points_regulations():
         assert calculate_sprint_points(9, season=season_check) == 0.0
         assert calculate_sprint_points(10, season=season_check) == 0.0
 
-    # 2026: Section A, Issue 03, Article A2.2.2 scale (8, 7, 6, 5, 4, 3, 2) to positions 1–7;
-    # Eighth place and below award zero points (P8=0.0)!
-    expected_2026 = {1: 8.0, 2: 7.0, 3: 6.0, 4: 5.0, 5: 4.0, 6: 3.0, 7: 2.0, 8: 0.0}
+    # 2026: Section A, Issue 03, Article A2.2.2 scale (8, 7, 6, 5, 4, 3, 2, 1) across all eight positions;
+    # Eighth place awards 1 point, and ninth place onward awards zero points (P8=1.0, P9=0.0)!
+    expected_2026 = {1: 8.0, 2: 7.0, 3: 6.0, 4: 5.0, 5: 4.0, 6: 3.0, 7: 2.0, 8: 1.0}
     for pos, expected_pts in expected_2026.items():
         assert calculate_sprint_points(pos, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=2) == expected_pts
     assert calculate_sprint_points(9, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=2) == 0.0
@@ -170,6 +170,22 @@ def test_mathematical_elimination_and_clinch():
     clinched, gap = calculate_clinch_threshold(400, 320, remaining_gps=3, remaining_sprints=0, season=2024)
     assert clinched is True
     assert gap == 80.0
+
+    # 2026 Season with sprints: 2 GPs + 2 Sprints left
+    # Max possible remaining for driver = (2 * 25) + (2 * 8) = 50 + 16 = 66 points
+    # Driver with 335 pts vs Leader with 400 pts: 335 + 66 = 401 > 400 (Not eliminated)
+    assert is_mathematically_eliminated(335, 400, remaining_gps=2, remaining_sprints=2, season=2026) is False
+    # Driver with 333 pts vs Leader with 400 pts: 333 + 66 = 399 < 400 (Eliminated)
+    assert is_mathematically_eliminated(333, 400, remaining_gps=2, remaining_sprints=2, season=2026) is True
+    # Clinch threshold with 2026 sprint capacity:
+    # Lead gap of 67 > 66 max capacity -> Clinched!
+    clinched_2026, gap_2026 = calculate_clinch_threshold(400, 333, remaining_gps=2, remaining_sprints=2, season=2026)
+    assert clinched_2026 is True
+    assert gap_2026 == 67.0
+    # Lead gap of 65 < 66 max capacity -> Not clinched!
+    clinched_2026_no, gap_2026_no = calculate_clinch_threshold(400, 335, remaining_gps=2, remaining_sprints=2, season=2026)
+    assert clinched_2026_no is False
+    assert gap_2026_no == 65.0
 
 # 11. 2014 Double Points Season Finale (Article 6.4 of 2014 FIA Sporting Regulations)
 def test_2014_double_points_season_finale():
@@ -237,6 +253,17 @@ def test_dead_heat_shared_points():
     # P1 (50) + P2 (36) = 86 pts / 2 = 43.0 pts each
     assert calculate_shared_points([1, 2], season=2014, is_final_event=True) == 43.0
 
+    # Sprint dead-heat across P8 and P9 (boundary test where P8 awards 1 pt and P9 awards 0 pts):
+    # Total points = P8 (1.0) + P9 (0.0) = 1.0 / 2 = 0.5 points each
+    # In 2024:
+    assert calculate_shared_points([8, 9], season=2024, is_sprint=True) == 0.5
+    # In 2026:
+    assert calculate_shared_points([8, 9], season=2026, is_sprint=True, consecutive_green_laps=2) == 0.5
+    # Dead-heat across P1 and P2 in 2026 Sprint: P1 (8) + P2 (7) = 15 / 2 = 7.5 pts each
+    assert calculate_shared_points([1, 2], season=2026, is_sprint=True, consecutive_green_laps=2) == 7.5
+    # Dead-heat across P7 and P8 in 2026 Sprint: P7 (2) + P8 (1) = 3 / 2 = 1.5 pts each
+    assert calculate_shared_points([7, 8], season=2026, is_sprint=True, consecutive_green_laps=2) == 1.5
+
 # 14. Constructor Maximum Capacity (2 cars per team)
 def test_constructor_max_capacity():
     # 2024: 1 GP = P1 (25) + P2 (18) + FL (1) = 44 pts
@@ -246,6 +273,10 @@ def test_constructor_max_capacity():
     # 2025: 1 GP = P1 (25) + P2 (18) = 43 pts (no FL)
     # 1 Sprint = 15 pts
     assert calculate_max_remaining_points(1, 1, season=2025, is_constructor=True) == 58.0
+
+    # 2026: 1 GP = P1 (25) + P2 (18) = 43 pts (no FL)
+    # 1 Sprint = P1 (8) + P2 (7) = 15 pts (Article A2.2.2)
+    assert calculate_max_remaining_points(1, 1, season=2026, is_constructor=True) == 58.0
 
 # 15. Countback Distinction Between Grand Prix and Sprint Race Wins
 def test_countback_sprint_vs_grand_prix():
@@ -306,18 +337,19 @@ def test_2026_sprint_scoring_gates():
 
     # Case C: Exactly 50% distance (0.50) with exactly 2 consecutive green laps -> POINTS AWARDED!
     # Under Section A, Issue 03, Article A2.2.2:
-    # P1=8, P2=7, P3=6, P4=5, P5=4, P6=3, P7=2.
-    # Eighth place and below award zero points (P8=0.0, P9=0.0)!
+    # P1=8, P2=7, P3=6, P4=5, P5=4, P6=3, P7=2, P8=1.
+    # Ninth place and below award zero points (P9=0.0, P10=0.0)!
     assert calculate_sprint_points(1, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 8.0
     assert calculate_sprint_points(2, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 7.0
     assert calculate_sprint_points(7, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 2.0
-    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 0.0
+    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 1.0
     assert calculate_sprint_points(9, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 0.0
 
     # Case D: Full sprint distance (100%) with 10 green laps
     assert calculate_sprint_points(1, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 8.0
     assert calculate_sprint_points(7, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 2.0
-    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 0.0
+    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 1.0
+    assert calculate_sprint_points(9, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 0.0
 
 # 18. 2026 Championship Countback Fallback to Qualifying Results (Section A, Article A2.1.4(c))
 def test_2026_countback_qualifying_fallback():

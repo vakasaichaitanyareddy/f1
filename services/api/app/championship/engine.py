@@ -23,13 +23,13 @@ REGULATION_PROVENANCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "fia_document": "FIA Formula One World Championship Sporting Regulations — 2026 Technical & Sporting Regulations",
         "document_version": "Section A, Issue 03 & Section B, Issue 09 (Published October 1, 2026)",
         "source_url": "https://www.fia.com/regulation/category/110",
-        "source_reference": "Section A, Article A2.2.1 (Grand Prix points & 2-consecutive green laps gate); Section A, Article A2.2.2 (Sprint points scale 8-7-6-5-4-3-2 to Top 7 & >=50% distance gate); Section A, Article A2.1.4(c) (Championship countback fallback to Qualifying results)",
+        "source_reference": "Section A, Article A2.2.1 (Grand Prix points & 2-consecutive green laps gate); Section A, Article A2.2.2 (Sprint points scale 8-7-6-5-4-3-2-1 to Top 8 & >=50% distance gate); Section A, Article A2.1.4(c) (Championship countback fallback to Qualifying results)",
         "fl_bonus_active": False,
         "fl_distance_threshold": None,
         "double_points_final_round": False,
         "consecutive_green_laps_required": 2,
         "sprint_min_distance_ratio": 0.50,
-        "sprint_points_scale": "8-7-6-5-4-3-2 (Top 7)",
+        "sprint_points_scale": "8-7-6-5-4-3-2-1 (Top 8)",
         "countback_qualifying_fallback": True,
     },
     "2025": {
@@ -158,7 +158,7 @@ SPRINT_POINTS_2022_2025: Dict[int, float] = {
 # Alias for backwards compatibility
 SPRINT_POINTS_2022_PRESENT = SPRINT_POINTS_2022_2025
 
-# 2026 Sprint Points (FIA Section A, Issue 03, Article A2.2.2: Top 7 award 8–7–6–5–4–3–2; 8th place and below: 0 pts)
+# 2026 Sprint Points (FIA Section A, Issue 03, Article A2.2.2: Top 8 award 8–7–6–5–4–3–2–1; P9 onward: 0 pts)
 SPRINT_POINTS_2026: Dict[int, float] = {
     1: 8.0,
     2: 7.0,
@@ -167,6 +167,7 @@ SPRINT_POINTS_2026: Dict[int, float] = {
     5: 4.0,
     6: 3.0,
     7: 2.0,
+    8: 1.0,
 }
 
 # 2021 Inaugural Sprint Qualifying Points (P1 to P3: 3–2–1)
@@ -445,25 +446,40 @@ def calculate_shared_points(
     season: int = 2024,
     distance_completed_ratio: float = 1.0,
     is_final_event: bool = False,
+    is_sprint: bool = False,
+    consecutive_green_laps: Optional[int] = None,
 ) -> float:
     """
     Computes shared points for dead-heat finishes where multiple drivers tie for position(s).
     According to FIA regulations and historical precedent (e.g. dead heat across positions N to N+k-1),
     the points for all tied positions are summed and divided equally among the tied competitors.
+    Supports both Grand Prix races and Sprint sessions.
     Returns the points awarded to each tied driver.
     """
     if not positions:
         return 0.0
-    total_pts = sum(
-        calculate_grand_prix_points(
-            pos,
-            fastest_lap=False,
-            season=season,
-            distance_completed_ratio=distance_completed_ratio,
-            is_final_event=is_final_event,
+
+    if is_sprint:
+        total_pts = sum(
+            calculate_sprint_points(
+                pos,
+                season=season,
+                distance_completed_ratio=distance_completed_ratio,
+                consecutive_green_laps=consecutive_green_laps,
+            )
+            for pos in positions
         )
-        for pos in positions
-    )
+    else:
+        total_pts = sum(
+            calculate_grand_prix_points(
+                pos,
+                fastest_lap=False,
+                season=season,
+                distance_completed_ratio=distance_completed_ratio,
+                is_final_event=is_final_event,
+            )
+            for pos in positions
+        )
     return total_pts / float(len(positions))
 
 def calculate_sprint_points(
@@ -566,7 +582,7 @@ def calculate_max_remaining_points(
             standard_c_gp = ERA_1991_2002_POINTS[1] + ERA_1991_2002_POINTS[2]
 
         if season >= 2026:
-            # 2026 Art A2.2.2: P1=8, P2=7 -> 15 pts (P8=0 pts does not affect top 2 cars capacity)
+            # 2026 Art A2.2.2: P1=8, P2=7 -> 15 pts (P1-P8 scale 8-7-6-5-4-3-2-1)
             sprint_c_max = SPRINT_POINTS_2026[1] + SPRINT_POINTS_2026[2]  # 8 + 7 = 15
         elif season >= 2022:
             sprint_c_max = SPRINT_POINTS_2022_2025[1] + SPRINT_POINTS_2022_2025[2]  # 8 + 7 = 15
