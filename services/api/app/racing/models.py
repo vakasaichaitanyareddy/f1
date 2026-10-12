@@ -42,7 +42,7 @@ class User(Base):
     favorite_driver_id = Column(String, nullable=True)
     favorite_team_id = Column(String, nullable=True)
     pitwall_layout_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 class ConstructorModel(Base):
     __tablename__ = "constructors"
@@ -97,7 +97,7 @@ class SessionModel(Base):
     meeting_id = Column(String, ForeignKey("meetings.id"), nullable=False)
     name = Column(String, nullable=False)
     type = Column(SQLEnum(SessionTypeEnum), nullable=False)
-    start_time_utc = Column(DateTime, nullable=False)
+    start_time_utc = Column(DateTime(timezone=True), nullable=False)
     status = Column(SQLEnum(SessionStatusEnum), default=SessionStatusEnum.SCHEDULED)
 
     meeting = relationship("MeetingModel", back_populates="sessions")
