@@ -244,10 +244,36 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
               data_state: msg.data_state ?? prev.data_state,
             };
           });
+        } else if (msg.type === "RACE_CONTROL") {
+          setSnapshot((prev) => {
+            if (!prev) return prev;
+            const updatedRc = [...prev.race_control, msg.payload].slice(-30);
+            return {
+              ...prev,
+              race_control: updatedRc,
+              track_status: msg.payload.flag === "RED" ? "RED" : (msg.payload.flag?.includes("YELLOW") ? "YELLOW" : prev.track_status)
+            };
+          });
+        } else if (msg.type === "WEATHER") {
+          setSnapshot((prev) => {
+            if (!prev) return prev;
+            return { ...prev, weather: msg.payload };
+          });
+        } else if (msg.type === "MAP_POSITIONS") {
+          setSnapshot((prev) => {
+            if (!prev) return prev;
+            return { ...prev, driver_map_positions: msg.payload };
+          });
+        } else if (msg.type === "TELEMETRY") {
+          setSnapshot((prev) => {
+            if (!prev) return prev;
+            return { ...prev, telemetry: msg.payload };
+          });
         }
       } catch (err) {
         console.error("WS Parse error", err);
       }
+
     };
 
     ws.onclose = () => {

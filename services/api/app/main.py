@@ -25,10 +25,22 @@ async def lifespan(app: FastAPI):
     await redis_client.connect()
     # Register deterministic test fixture baseline
     live_session_manager.register_fixture_session("2024_01_race", BAHRAIN_2024_LIVE_FIXTURE)
+
+    # Wire OpenF1 streaming manager callback to LiveSessionManager
+    from app.providers.openf1_stream import openf1_stream_manager
+
+    def stream_callback(topic: str, payload: dict):
+        session_key = str(payload.get("session_key", openf1_stream_manager.active_session_key or ""))
+        asyncio.create_task(live_session_manager.on_stream_event(session_key, topic, payload))
+
+    openf1_stream_manager.event_callback = stream_callback
+
     yield
     # Shutdown
+    openf1_stream_manager.stop_streaming()
     await redis_client.close()
     await engine.dispose()
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

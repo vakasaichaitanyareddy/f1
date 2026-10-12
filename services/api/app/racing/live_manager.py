@@ -257,12 +257,15 @@ class LiveSessionManager:
         stints_raw = await self.provider.get_stints(openf1_session_key)
         weather_raw = await self.provider.get_weather(openf1_session_key)
         rc_raw = await self.provider.get_race_control_messages(openf1_session_key)
+        locations_raw = await self.provider.get_driver_locations(openf1_session_key)
+        telemetry_raw = await self.provider.get_telemetry_snapshot(openf1_session_key)
 
         data_state = DataStateEnum.LIVE if is_live_stream else DataStateEnum.HISTORICAL
         if not drivers_raw and not positions_raw:
             return None
 
         # Build driver lookup table
+
 
         drivers_by_num: Dict[int, Dict[str, Any]] = {}
         for d in drivers_raw:
@@ -415,6 +418,38 @@ class LiveSessionManager:
                 sector=rc.get("sector")
             ))
 
+        # Map Positions
+        map_positions: List[DriverMapPosition] = []
+        for loc in locations_raw:
+            d_num = loc.get("driver_number")
+            if d_num is not None and "x" in loc and "y" in loc:
+                d_info = drivers_by_num.get(d_num, {})
+                t_color = f"#{d_info.get('team_colour', 'FFFFFF')}" if d_info.get("team_colour") else "#FFFFFF"
+                map_positions.append(DriverMapPosition(
+                    driver_number=d_num,
+                    driver_code=d_info.get("name_acronym", f"D{d_num}"),
+                    team_color=t_color,
+                    x=float(loc.get("x", 0.0)),
+                    y=float(loc.get("y", 0.0)),
+                    date=datetime.now(timezone.utc)
+                ))
+
+        # Telemetry
+        telemetry_entries: List[TelemetryEntry] = []
+        for telem in telemetry_raw:
+            d_num = telem.get("driver_number")
+            if d_num is not None:
+                telemetry_entries.append(TelemetryEntry(
+                    driver_number=d_num,
+                    speed=int(telem.get("speed", 0)),
+                    throttle=int(telem.get("throttle", 0)),
+                    brake=int(telem.get("brake", 0)),
+                    n_gear=int(telem.get("n_gear", 0)),
+                    drs=int(telem.get("drs", 0)),
+                    rpm=int(telem.get("rpm", 0)),
+                    timestamp=datetime.now(timezone.utc)
+                ))
+
         seq = self.get_next_sequence(session_id)
         prov = ProvenanceMeta(
             source="OPENF1_REST_API",
@@ -439,11 +474,12 @@ class LiveSessionManager:
             pit_stops=pit_objects[-20:], # Latest 20 pit stops
             stints=stint_objects,
             race_control=rc_objects[-30:], # Latest 30 race control messages
-            driver_map_positions=[],
-            telemetry=[],
+            driver_map_positions=map_positions,
+            telemetry=telemetry_entries,
             sequence_number=seq,
             provenance=prov
         )
+
 
         self._snapshots[session_id] = snapshot
 
@@ -495,6 +531,55 @@ class LiveSessionManager:
             if dead in self._subscriber_queues[session_id]:
                 self._subscriber_queues[session_id].remove(dead)
 
+    async def on_stream_event(self, session_key: str, topic: str, payload: Dict[str, Any]):
+        """
+        Processes normalized events arriving from OpenF1StreamManager,
+        updates Redis snapshot cache, and broadcasts typed incremental updates.
+        """
+        # Find internal session id matching provider session key
+        session_id = None
+        for s_id, p_key in self._session_provider_map.items():
+            if str(p_key) == str(session_key):
+                session_id = s_id
+                break
+        if not session_id:
+            session_id = f"openf1_{session_key}"
+
+        seq = self.get_next_sequence(session_id)
+        now = datetime.now(timezone.utc)
+
+        update_type = "TIMING"
+        if "race_control" in topic:
+            update_type = "RACE_CONTROL"
+        elif "weather" in topic:
+            update_type = "WEATHER"
+        elif "location" in topic:
+            update_type = "MAP_POSITIONS"
+        elif "car_data" in topic:
+            update_type = "TELEMETRY"
+
+        update = LiveIncrementalUpdate(
+            type=update_type,
+            session_id=session_id,
+            sequence_number=seq,
+            timestamp=now,
+            data_state=DataStateEnum.LIVE,
+            data=payload
+        )
+
+        # Update Redis timestamp
+        if redis_client._redis:
+            try:
+                await redis_client.set(
+                    f"apex:live:last_update:{session_id}",
+                    {"timestamp": now.isoformat(), "topic": topic, "seq": seq},
+                    ttl_seconds=3600
+                )
+            except Exception:
+                pass
+
+        await self.broadcast_update(session_id, update)
+
     def subscribe(self, session_id: str) -> asyncio.Queue:
         """Subscribes a client to incremental updates with backpressure protection."""
         q: asyncio.Queue = asyncio.Queue(maxsize=100)
@@ -508,3 +593,4 @@ class LiveSessionManager:
 
 # Global LiveSessionManager singleton
 live_session_manager = LiveSessionManager()
+

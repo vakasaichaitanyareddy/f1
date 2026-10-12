@@ -230,6 +230,62 @@ def test_openf1_stream_manager_deduplication_and_filtering():
     assert len(events_received) == 2
 
 @pytest.mark.asyncio
+async def test_live_manager_stream_event_to_subscriber():
+    """
+    Verifies that on_stream_event formats incremental typed messages,
+    updates Redis timestamp, and delivers to subscribed queues.
+    """
+    mgr = LiveSessionManager()
+    queue = mgr.subscribe("2024_01_race")
+
+    await mgr.on_stream_event("9472", "v1/race_control", {
+        "session_key": 9472,
+        "category": "Flag",
+        "flag": "YELLOW",
+        "message": "SECTOR 2 YELLOW FLAG"
+    })
+
+    received = await queue.get()
+    assert received.type == "RACE_CONTROL"
+    assert received.session_id == "2024_01_race"
+    assert received.data["flag"] == "YELLOW"
+    assert received.data_state == DataStateEnum.LIVE
+
+    mgr.unsubscribe("2024_01_race", queue)
+
+@pytest.mark.asyncio
+async def test_live_manager_stream_event_location_and_telemetry():
+    """
+    Verifies that location and car_data topics map to MAP_POSITIONS and TELEMETRY.
+    """
+    mgr = LiveSessionManager()
+    queue = mgr.subscribe("2024_01_race")
+
+    # Location topic
+    await mgr.on_stream_event("9472", "v1/location", {
+        "session_key": 9472,
+        "driver_number": 1,
+        "x": 1234.5,
+        "y": 6789.0
+    })
+    msg_loc = await queue.get()
+    assert msg_loc.type == "MAP_POSITIONS"
+    assert msg_loc.data["x"] == 1234.5
+
+    # Car data topic
+    await mgr.on_stream_event("9472", "v1/car_data", {
+        "session_key": 9472,
+        "driver_number": 1,
+        "speed": 315,
+        "throttle": 100
+    })
+    msg_telem = await queue.get()
+    assert msg_telem.type == "TELEMETRY"
+    assert msg_telem.data["speed"] == 315
+
+    mgr.unsubscribe("2024_01_race", queue)
+
+@pytest.mark.asyncio
 async def test_upstream_token_missing_credentials_graceful_handling():
     """
     Verifies that when OPENF1_USERNAME / OPENF1_PASSWORD are not set in the environment,
@@ -238,8 +294,8 @@ async def test_upstream_token_missing_credentials_graceful_handling():
     """
     from app.providers.openf1 import OpenF1Provider
     from app.providers.openf1_stream import OpenF1StreamManager
-
     from app.core.config import settings
+
     provider = OpenF1Provider()
     token = await provider.get_access_token()
     # In test environment without .env credentials, token should be None
@@ -251,5 +307,7 @@ async def test_upstream_token_missing_credentials_graceful_handling():
         assert res is False
         assert stream_mgr.connection_status == "CREDENTIALS_MISSING"
         assert stream_mgr.is_connected is False
+
+
 
 

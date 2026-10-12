@@ -83,12 +83,15 @@ class OpenF1StreamManager:
                     self.is_connected = True
                     self.connection_status = "CONNECTED"
                     logger.info("Successfully connected to OpenF1 MQTT broker.")
-                    # Subscribe to required topics for active session
+                    # Subscribe to required supported topics for active session
                     topics = [
                         "v1/position",
                         "v1/intervals",
                         "v1/laps",
                         "v1/pit",
+                        "v1/stints",
+                        "v1/location",
+                        "v1/car_data",
                         "v1/weather",
                         "v1/race_control"
                     ]
@@ -98,6 +101,7 @@ class OpenF1StreamManager:
                 else:
                     self.is_connected = False
                     self.connection_status = f"CONNECTION_FAILED_RC_{rc}"
+
                     logger.error(f"OpenF1 MQTT connection failed with result code {rc}")
 
             def on_message(client, userdata, msg):
