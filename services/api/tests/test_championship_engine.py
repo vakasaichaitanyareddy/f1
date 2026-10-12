@@ -301,22 +301,24 @@ def test_2026_sprint_scoring_gates():
     # Case D: Full sprint distance (100%) with 10 green laps
     assert calculate_sprint_points(1, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 8.0
 
-# 18. 2026 Championship Countback Fallback to Qualifying Results
+# 18. 2026 Championship Countback Fallback to Qualifying Results (Section A, Article A2.1.4(c))
 def test_2026_countback_qualifying_fallback():
-    # Both competitors have identical GP race results and sprint results:
-    # GP: [1, 2, 3] each
-    # Sprints: [1, 2] each
+    # Both competitors have identical GP race results: [1, 2, 3] each.
+    # Note: Competitor A has 1 sprint win, Competitor B has 5 sprint wins.
+    # Under Section A, Article A2.1.4(c), 2026 countback proceeds directly from GP race finishes
+    # to Qualifying finishes (comparing pole positions), without an intervening sprint tie-break stage!
     gp_finishes = [1, 2, 3]
-    sprint_finishes = [1, 2]
+    sprints_a = [1]
+    sprints_b = [1, 1, 1, 1, 1]
 
     # Driver A: Qualifying [1, 1, 3] (two poles)
     # Driver B: Qualifying [1, 2, 2] (one pole)
-    # Under 2026 Ruleset (Section A, Article A2.2), Driver A wins on qualifying countback!
+    # Under 2026 Ruleset (Section A, Article A2.1.4(c)), Driver A wins on qualifying countback!
     assert evaluate_fia_countback(
         gp_finishes,
         gp_finishes,
-        sprint_finishes_a=sprint_finishes,
-        sprint_finishes_b=sprint_finishes,
+        sprint_finishes_a=sprints_a,
+        sprint_finishes_b=sprints_b,
         qualifying_finishes_a=[1, 1, 3],
         qualifying_finishes_b=[1, 2, 2],
         season=2026,
@@ -326,19 +328,19 @@ def test_2026_countback_qualifying_fallback():
     assert evaluate_fia_countback(
         gp_finishes,
         gp_finishes,
-        sprint_finishes_a=sprint_finishes,
-        sprint_finishes_b=sprint_finishes,
+        sprint_finishes_a=sprints_a,
+        sprint_finishes_b=sprints_b,
         qualifying_finishes_a=[1, 3, 3],
         qualifying_finishes_b=[1, 2, 3],
         season=2026,
     ) == -1
 
-    # Completely tied on GP, Sprint, AND Qualifying results -> 0 (FIA discretion)
+    # Completely tied on GP AND Qualifying results -> 0 (FIA discretion)
     assert evaluate_fia_countback(
         gp_finishes,
         gp_finishes,
-        sprint_finishes_a=sprint_finishes,
-        sprint_finishes_b=sprint_finishes,
+        sprint_finishes_a=sprints_a,
+        sprint_finishes_b=sprints_b,
         qualifying_finishes_a=[1, 2, 3],
         qualifying_finishes_b=[1, 2, 3],
         season=2026,
@@ -348,12 +350,12 @@ def test_2026_countback_qualifying_fallback():
     assert evaluate_fia_countback(
         gp_finishes,
         gp_finishes,
-        sprint_finishes_a=sprint_finishes,
-        sprint_finishes_b=sprint_finishes,
+        sprint_finishes_a=sprints_a,
+        sprint_finishes_b=sprints_b,
         qualifying_finishes_a=[1, 1, 3],
         qualifying_finishes_b=[1, 2, 2],
         season=2024,
-    ) == 0
+    ) == -1  # In 2024, sprint finishes broke the tie before qualifying!
 
 # 19. 2026 Provenance Metadata Independence
 def test_2026_regulation_provenance_independence():
@@ -363,6 +365,7 @@ def test_2026_regulation_provenance_independence():
     assert prov_2026["season_range"] == "2026"
     assert "Section A, Issue 03" in prov_2026["document_version"]
     assert "Article A2.2" in prov_2026["source_reference"]
+    assert "Article A2.1.4(c)" in prov_2026["source_reference"]
     assert prov_2026["consecutive_green_laps_required"] == 2
     assert prov_2026["sprint_min_distance_ratio"] == 0.50
     assert prov_2026["countback_qualifying_fallback"] is True
@@ -372,5 +375,106 @@ def test_2026_regulation_provenance_independence():
     assert "2025 Issue 1" in prov_2025["document_version"]
     assert "Article 6.4" in prov_2025["source_reference"]
     assert prov_2025["countback_qualifying_fallback"] is False
+
+# 20. Missing-Context Handling and Typed Errors (2026 Gates & Distance)
+def test_missing_context_handling_and_typed_errors():
+    from app.championship.engine import InsufficientContextError, resolve_distance_band
+
+    # When require_eligibility_context=True and consecutive_green_laps is omitted or None
+    with pytest.raises(InsufficientContextError, match="requires 'consecutive_green_laps' context"):
+        calculate_grand_prix_points(1, season=2026, require_eligibility_context=True)
+
+    with pytest.raises(InsufficientContextError, match="requires 'consecutive_green_laps' context"):
+        calculate_sprint_points(1, season=2026, require_eligibility_context=True)
+
+    # When distance context is explicitly None and lap counts are not provided
+    with pytest.raises(InsufficientContextError, match="Race distance context is missing"):
+        resolve_distance_band(distance_completed_ratio=None, laps_completed=None, scheduled_laps=None)
+
+    with pytest.raises(InsufficientContextError, match="Race distance context is missing"):
+        calculate_grand_prix_points(1, season=2026, distance_completed_ratio=None, consecutive_green_laps=2)
+
+    with pytest.raises(InsufficientContextError, match="Race distance context is missing"):
+        calculate_sprint_points(1, season=2026, distance_completed_ratio=None, consecutive_green_laps=2)
+
+# 21. Consecutive-Lap Eligibility Session History Preservation
+def test_consecutive_lap_history_not_invalidated_by_later_neutralization():
+    from app.championship.engine import verify_consecutive_laps_history
+
+    # Scenario 1: Green flag on laps 1-3 (3 consecutive green laps), then SC on lap 4, then race stopped
+    # Laps: [False (green), False (green), False (green), True (SC), True (SC)]
+    flags_early_green = [False, False, False, True, True]
+    is_eligible, max_green = verify_consecutive_laps_history(flags_early_green, min_consecutive=2)
+    assert is_eligible is True
+    assert max_green == 3
+
+    # Scenario 2: Safety car on laps 1-5, green flag on laps 6-7 (2 consecutive green laps),
+    # then VSC on lap 8, then red flag.
+    # Later neutralization CANNOT invalidate the qualifying sequence!
+    flags_mid_green = [True, True, True, True, True, False, False, True]
+    is_eligible, max_green = verify_consecutive_laps_history(flags_mid_green, min_consecutive=2)
+    assert is_eligible is True
+    assert max_green == 2
+
+    # Scenario 3: Intermittent safety cars where consecutive green laps never reached 2
+    # E.g.: [Green, SC, Green, SC, Green, SC] -> max consecutive green is 1
+    flags_never_2 = [False, True, False, True, False, True]
+    is_eligible, max_green = verify_consecutive_laps_history(flags_never_2, min_consecutive=2)
+    assert is_eligible is False
+    assert max_green == 1
+
+# 22. Exact Integer Lap Counts and Distance Boundaries (Uneven Divisions)
+def test_distance_thresholds_exact_integer_lap_counts():
+    # 53-lap race (e.g. Monza / Suzuka schedule):
+    # 25% = 13.25 laps -> 13 laps is <25%, 14 laps is >=25%
+    # 50% = 26.50 laps -> 26 laps is <50%, 27 laps is >=50%
+    # 75% = 39.75 laps -> 39 laps is <75%, 40 laps is >=75%
+
+    # A) 13 laps / 53 laps = 0.24528 (< 25% band, Column 1)
+    pts_13 = calculate_grand_prix_points(1, season=2024, laps_completed=13, scheduled_laps=53)
+    assert pts_13 == 6.0
+
+    # B) 14 laps / 53 laps = 0.26415 (25% to <50% band, Column 2)
+    pts_14 = calculate_grand_prix_points(1, season=2024, laps_completed=14, scheduled_laps=53)
+    assert pts_14 == 13.0
+
+    # C) 26 laps / 53 laps = 0.49056 (< 50% band, Column 2)
+    pts_26 = calculate_grand_prix_points(1, season=2024, laps_completed=26, scheduled_laps=53)
+    assert pts_26 == 13.0
+
+    # D) 27 laps / 53 laps = 0.50943 (50% to <75% band, Column 3)
+    pts_27 = calculate_grand_prix_points(1, season=2024, laps_completed=27, scheduled_laps=53)
+    assert pts_27 == 19.0
+
+    # E) 39 laps / 53 laps = 0.73584 (< 75% band, Column 3)
+    pts_39 = calculate_grand_prix_points(1, season=2024, laps_completed=39, scheduled_laps=53)
+    assert pts_39 == 19.0
+
+    # F) 40 laps / 53 laps = 0.75471 (>= 75% Full distance, Column 4)
+    pts_40 = calculate_grand_prix_points(1, season=2024, laps_completed=40, scheduled_laps=53)
+    assert pts_40 == 25.0
+
+    # 44-lap race (e.g. Spa):
+    # 50% = exactly 22 laps -> at 22 laps, ratio == 0.50 exactly
+    pts_22_spa = calculate_grand_prix_points(1, season=2024, laps_completed=22, scheduled_laps=44)
+    assert pts_22_spa == 19.0
+
+# 23. 2014 Season Finale Metadata Verification
+def test_2014_finale_derived_from_official_round_metadata():
+    # Ordinary rounds in 2014 (Round 1 to 18 of 19): standard 25 points, double points MUST NOT activate
+    assert calculate_grand_prix_points(1, season=2014, round_number=1, total_rounds=19) == 25.0
+    assert calculate_grand_prix_points(1, season=2014, round_number=10, total_rounds=19) == 25.0
+    assert calculate_grand_prix_points(1, season=2014, round_number=18, total_rounds=19) == 25.0
+
+    # Even if an erroneous is_final_event=True is passed for Round 10, round metadata takes precedence!
+    assert calculate_grand_prix_points(1, season=2014, round_number=10, total_rounds=19, is_final_event=True) == 25.0
+
+    # Round 19 of 19: Official finale -> DOUBLE POINTS ACTIVATE (P1 = 50.0, P2 = 36.0)
+    assert calculate_grand_prix_points(1, season=2014, round_number=19, total_rounds=19) == 50.0
+    assert calculate_grand_prix_points(2, season=2014, round_number=19, total_rounds=19) == 36.0
+
+    # Round 19 of other seasons (e.g. 2024 round 19): NEVER awards double points
+    assert calculate_grand_prix_points(1, season=2024, round_number=19, total_rounds=24) == 25.0
+
 
 

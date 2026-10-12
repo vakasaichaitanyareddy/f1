@@ -77,11 +77,14 @@ All rules are verified against official FIA Sporting Regulations, WMSC bulletins
   - 2026 GP + Sprint: $(25 + 18) + (8 + 7) = 43 + 15 = 58$ points.
   - 2014 Finale GP: $(50 + 36) = 86$ points.
 
-### 3.7. 2026 Sporting Regulations & Specific Gates (Section A, Issue 03, Article A2.2)
-- **Governing Reference:** Official FIA 2026 Technical & Sporting Regulations, Section A, Issue 03, Article A2.2 and Section B, Issue 09 (published October 1, 2026).
-- **Grand Prix Scoring Gate:** No championship points are awarded to any driver or constructor unless the leader has completed at least **two complete, consecutive laps without a Safety Car (SC) or Virtual Safety Car (VSC)** procedure.
+### 3.7. 2026 Sporting Regulations & Specific Gates (Section A, Article A2.2 & Article A2.1.4(c))
+- **Governing Reference:** Official FIA 2026 Technical & Sporting Regulations, Section A, Issue 03, Article A2.2 (points & scoring gates), Article A2.1.4(c) (countback), and Section B, Issue 09 (published October 1, 2026).
+- **Grand Prix Scoring Gate:** No championship points are awarded to any driver or constructor unless the leader has completed at least **two complete, consecutive laps without a Safety Car (SC) or Virtual Safety Car (VSC)** procedure (Article A2.2). Missing eligibility context raises a typed `InsufficientContextError`.
 - **Sprint Scoring Gate:** Sprint points (8, 7, 6, 5, 4, 3, 2, 1) are awarded only if:
   1. The leader has completed at least **two complete, consecutive laps without SC or VSC**, AND
-  2. At least **50% of the scheduled sprint distance** has been completed.
-- **Championship Countback Fallback to Qualifying:** If competitors remain tied after exhaustive comparison of Grand Prix finishing positions (1st, 2nd, 3rd, etc.) and Sprint finishing positions, countback falls back to **Qualifying results** (comparing most 1st places / pole positions in qualifying, then 2nd places, 3rd places, etc.). If still tied, the FIA will nominate the winner.
+  2. At least **50% of the scheduled sprint distance** has been completed (Article A2.2).
+- **Championship Countback Fallback to Qualifying (Article A2.1.4(c)):** If competitors remain tied after exhaustive comparison of Grand Prix finishing positions (1st, 2nd, 3rd, etc.), countback falls back directly to **Qualifying results** (comparing most 1st places / pole positions in qualifying, then 2nd places, 3rd places, etc.). If still tied across all criteria, the FIA will nominate the winner. Sprint sessions are not inserted as an intervening tie-break stage for the 2026 Championship countback under Article A2.1.4(c).
+- **Session History Invalidation Protection:** Once a qualifying sequence of consecutive green-flag laps has occurred anywhere in session history, eligibility is satisfied and cannot be invalidated by later neutralizations or stoppages.
+- **2014 Double Points Event Identity:** Derived strictly from verified season and round metadata (Round 19 of 19) rather than caller-supplied Boolean flags.
+
 

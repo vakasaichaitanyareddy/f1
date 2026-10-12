@@ -4,8 +4,7 @@ Pure mathematical evaluation of championship points, countbacks, eliminations,
 shortened race distance bands, penalty adjustments, and title clinching.
 
 FIA Regulation Provenance and Version Metadata:
-- 2026 Technical & Sporting Regulations: Section A, Issue 03, Article A2.2 & Section B, Issue 09 (Oct 1, 2026):
-  Points allocation, 2-consecutive green laps gate, sprint >=50% distance condition, and qualifying countback fallback.
+- 2026 Technical & Sporting Regulations: Section A, Issue 03, Article A2.2 (Points system & gates) & Article A2.1.4(c) (Qualifying countback fallback); Section B, Issue 09 (Oct 1, 2026).
 - 2025 Sporting Regulations: Article 6.4/6.5 (Issue 1, published Oct 17, 2024; Fastest-lap bonus point abolished)
 - 2022–2024 Sporting Regulations: Article 6.4 (Fastest-lap bonus point requiring >=50% distance completed & top 10 finish),
   Article 6.5 (Shortened race graduated point allocations: <25%, 25%–<50%, 50%–<75%)
@@ -24,7 +23,7 @@ REGULATION_PROVENANCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "fia_document": "FIA Formula One World Championship Sporting Regulations — 2026 Technical & Sporting Regulations",
         "document_version": "Section A, Issue 03 & Section B, Issue 09 (Published October 1, 2026)",
         "source_url": "https://www.fia.com/regulation/category/110",
-        "source_reference": "Section A, Article A2.2 (Points allocation, 2-consecutive green-flag laps condition, sprint >=50% distance condition, and qualifying countback fallback)",
+        "source_reference": "Section A, Article A2.2 (Points scales, 2-consecutive green-flag laps condition, sprint >=50% distance condition); Section A, Article A2.1.4(c) (Championship countback fallback to Qualifying results)",
         "fl_bonus_active": False,
         "fl_distance_threshold": None,
         "double_points_final_round": False,
@@ -257,52 +256,133 @@ def is_fastest_lap_eligible(
 
     return False
 
+class InsufficientContextError(ValueError):
+    """
+    Raised when required regulatory session context (e.g. consecutive green-flag laps,
+    distance ratio, lap counts) is omitted or None under governing regulations where
+    eligibility cannot be determined. Distinct from an official zero-point outcome.
+    """
+    pass
+
+def verify_consecutive_laps_history(
+    lap_sc_vsc_flags: List[bool],
+    min_consecutive: int = 2,
+) -> Tuple[bool, int]:
+    """
+    Evaluates whether the session history contains at least `min_consecutive` consecutive
+    laps completed without a Safety Car (SC) or Virtual Safety Car (VSC) intervention.
+    `lap_sc_vsc_flags[i]` is True if lap i was under SC or VSC, False if under green flag.
+    Crucial Regulatory Rule:
+    Once a qualifying sequence of consecutive green-flag laps has occurred anywhere in the
+    session history, this eligibility condition is satisfied and CANNOT be invalidated
+    by a later SC, VSC, or red-flag stoppage.
+    Returns: (is_eligible, max_consecutive_green_laps)
+    """
+    max_consecutive = 0
+    current_consecutive = 0
+
+    for is_neutralized in lap_sc_vsc_flags:
+        if not is_neutralized:
+            current_consecutive += 1
+            if current_consecutive > max_consecutive:
+                max_consecutive = current_consecutive
+        else:
+            current_consecutive = 0
+
+    return (max_consecutive >= min_consecutive, max_consecutive)
+
+def resolve_distance_band(
+    distance_completed_ratio: Optional[float] = 1.0,
+    laps_completed: Optional[int] = None,
+    scheduled_laps: Optional[int] = None,
+) -> float:
+    """
+    Resolves the exact distance completion ratio using precise arithmetic or exact lap counts:
+    - If laps_completed and scheduled_laps are provided, computes ratio using exact integer division.
+    - Accurately checks 25%, 50%, and 75% boundaries for schedules that do not divide evenly
+      (e.g., 53 laps: 25% = 13.25 laps, 50% = 26.5 laps, 75% = 39.75 laps).
+    - If distance_completed_ratio is provided, returns float(distance_completed_ratio).
+    - If explicit None is passed and no lap counts provided, raises InsufficientContextError.
+    """
+    if laps_completed is not None and scheduled_laps is not None:
+        if scheduled_laps <= 0:
+            return 0.0
+        return laps_completed / float(scheduled_laps)
+    if distance_completed_ratio is not None:
+        return float(distance_completed_ratio)
+    raise InsufficientContextError(
+        "Race distance context is missing: distance_completed_ratio is None and "
+        "no (laps_completed, scheduled_laps) was provided."
+    )
+
 def calculate_grand_prix_points(
     position: int,
     fastest_lap: bool = False,
     season: int = 2024,
-    distance_completed_ratio: float = 1.0,
+    distance_completed_ratio: Optional[float] = 1.0,
+    laps_completed: Optional[int] = None,
+    scheduled_laps: Optional[int] = None,
     penalty_points_deduction: float = 0.0,
     is_final_event: bool = False,
+    round_number: Optional[int] = None,
+    total_rounds: Optional[int] = None,
     consecutive_green_laps: Optional[int] = None,
+    require_eligibility_context: bool = False,
 ) -> float:
     """
     Computes points awarded for a Grand Prix finish according to season and FIA regulations.
     Supports:
-    - 2026 Ruleset (Section A, Issue 03, Article A2.2): No points awarded unless the leader has completed
-      at least two complete, consecutive laps without a Safety Car (SC) or Virtual Safety Car (VSC) procedure.
+    - 2026 Ruleset (Section A, Issue 03, Article A2.2):
+      No championship points are awarded unless the leader has completed at least two complete,
+      consecutive laps without a Safety Car (SC) or Virtual Safety Car (VSC) procedure.
+      If require_eligibility_context is True (or explicit None passed when context checking is enforced)
+      and consecutive_green_laps is None, an InsufficientContextError is raised.
     - Full distance (>= 75%)
     - Shortened races (Post-2021 Article 6.5 graduated points: <25%, 25%–<50%, 50%–<75%)
     - Half-points rule for historical seasons (pre-2022 <75% distance rule)
-    - 2014 season finale double-points rule (Article 6.4 of 2014 FIA Sporting Regulations)
+    - 2014 season finale double-points rule (Article 6.4 of 2014 FIA Sporting Regulations):
+      Must be verified by official season round metadata (round_number == total_rounds == 19 or explicit is_final_event).
+      Arbitrary caller flags are rejected if contradicted by season metadata.
     - Fastest lap bonus point eligibility (2019–2021 top 10; 2022–2024 top 10 & >=50% distance; 2025+ rescinded)
     - Penalty deductions (non-negative floor)
     """
     if position < 1:
         return 0.0
 
-    # 2026 Grand Prix Scoring Gate (Section A, Issue 03, Article A2.2)
-    # No championship points awarded if leader has not completed at least 2 consecutive laps without SC/VSC
-    if season >= 2026 and consecutive_green_laps is not None and consecutive_green_laps < 2:
-        return 0.0
+    # 1. 2026 Grand Prix Scoring Gate (Section A, Issue 03, Article A2.2)
+    if season >= 2026:
+        if consecutive_green_laps is None and require_eligibility_context:
+            raise InsufficientContextError(
+                "2026 Grand Prix scoring requires 'consecutive_green_laps' context under "
+                "Section A, Article A2.2. Value cannot be None or omitted."
+            )
+        if consecutive_green_laps is not None and consecutive_green_laps < 2:
+            return 0.0
 
-    # 1. Determine Base Finishing Position Points
-    if distance_completed_ratio < 0.25:
-        if distance_completed_ratio <= 0.0:
+    # 2. Distance Resolution with exact integer lap counts or ratio
+    ratio = resolve_distance_band(
+        distance_completed_ratio=distance_completed_ratio,
+        laps_completed=laps_completed,
+        scheduled_laps=scheduled_laps,
+    )
+
+    # 3. Determine Base Finishing Position Points
+    if ratio < 0.25:
+        if ratio <= 0.0:
             return 0.0
         if season >= 2022:
             base = SHORTENED_LESS_THAN_25.get(position, 0.0)
         else:
             # Historical: No points awarded if under 2 laps / insufficient distance
             return 0.0
-    elif distance_completed_ratio < 0.50:
+    elif ratio < 0.50:
         if season >= 2022:
             base = SHORTENED_25_TO_50.get(position, 0.0)
         else:
             # Half-points rule in historical seasons
             full_base = MODERN_GP_POINTS.get(position, 0.0) if season >= 2010 else ERA_2003_2009_POINTS.get(position, 0.0)
             base = full_base * 0.5
-    elif distance_completed_ratio < 0.75:
+    elif ratio < 0.75:
         if season >= 2022:
             # Band 3: 50% to less than 75% completed (Article 6.5 Column 3)
             base = SHORTENED_50_TO_75.get(position, 0.0)
@@ -319,14 +399,27 @@ def calculate_grand_prix_points(
         else:
             base = ERA_1991_2002_POINTS.get(position, 0.0)
 
-    # 2. 2014 Double-Points Exception (Article 6.4 of 2014 Sporting Regulations)
-    # Applies strictly to the final event of the 2014 Championship (Round 19 Abu Dhabi GP)
-    if season == 2014 and is_final_event:
-        base *= 2.0
+    # 4. 2014 Double-Points Exception Verification (Article 6.4 of 2014 Sporting Regulations)
+    # Applies strictly to the final event of the 2014 Championship (Round 19 Abu Dhabi GP).
+    # Verified against round metadata: if round_number is provided, must be round 19 of 19.
+    if season == 2014:
+        is_official_finale = False
+        if round_number is not None:
+            if total_rounds is not None and round_number == total_rounds and round_number == 19:
+                is_official_finale = True
+            elif total_rounds is None and round_number == 19:
+                is_official_finale = True
+            else:
+                is_official_finale = False
+        elif is_final_event:
+            is_official_finale = True
 
-    # 3. Fastest Lap Bonus Point Applicability
+        if is_official_finale:
+            base *= 2.0
+
+    # 5. Fastest Lap Bonus Point Applicability
     fl_awarded = 0.0
-    if fastest_lap and is_fastest_lap_eligible(position, season=season, distance_completed_ratio=distance_completed_ratio):
+    if fastest_lap and is_fastest_lap_eligible(position, season=season, distance_completed_ratio=ratio):
         fl_awarded = FASTEST_LAP_POINT
 
     total = base + fl_awarded - penalty_points_deduction
@@ -361,15 +454,20 @@ def calculate_shared_points(
 def calculate_sprint_points(
     position: int,
     season: int = 2024,
-    distance_completed_ratio: float = 1.0,
+    distance_completed_ratio: Optional[float] = 1.0,
+    laps_completed: Optional[int] = None,
+    scheduled_laps: Optional[int] = None,
     consecutive_green_laps: Optional[int] = None,
+    require_eligibility_context: bool = False,
 ) -> float:
     """
     Computes points awarded for a Sprint session according to season regulations.
     - 2026 Ruleset (Section A, Issue 03, Article A2.2):
       Sprint points are awarded only if:
       1. Leader has completed at least two complete, consecutive laps without SC/VSC procedure, AND
-      2. At least 50% of scheduled sprint distance has been completed (distance_completed_ratio >= 0.50).
+      2. At least 50% of scheduled sprint distance has been completed (ratio >= 0.50).
+      If require_eligibility_context is True and either required context is omitted or None for 2026,
+      raises InsufficientContextError.
     - 2022–2025: Top 8 (8 down to 1).
     - 2021: Top 3 (3, 2, 1).
     """
@@ -378,9 +476,20 @@ def calculate_sprint_points(
 
     # 2026 Sprint Scoring Gate (Section A, Issue 03, Article A2.2)
     if season >= 2026:
+        if consecutive_green_laps is None and require_eligibility_context:
+            raise InsufficientContextError(
+                "2026 Sprint scoring requires 'consecutive_green_laps' context under "
+                "Section A, Article A2.2. Value cannot be None or omitted."
+            )
         if consecutive_green_laps is not None and consecutive_green_laps < 2:
             return 0.0
-        if distance_completed_ratio < 0.50:
+
+        ratio = resolve_distance_band(
+            distance_completed_ratio=distance_completed_ratio,
+            laps_completed=laps_completed,
+            scheduled_laps=scheduled_laps,
+        )
+        if ratio < 0.50:
             return 0.0
 
     if season == 2021:
@@ -480,7 +589,20 @@ def evaluate_fia_countback(
         elif counts_b[pos] > counts_a[pos]:
             return -1
 
-    # Secondary tie-breaker: Sprint finishes if provided
+    # 2026 Ruleset (Section A, Article A2.1.4(c)):
+    # Fallback directly to Qualifying results if Grand Prix finishing positions cannot resolve tie
+    if season >= 2026:
+        if qualifying_finishes_a is not None and qualifying_finishes_b is not None:
+            q_counts_a = {pos: qualifying_finishes_a.count(pos) for pos in range(1, max_position + 1)}
+            q_counts_b = {pos: qualifying_finishes_b.count(pos) for pos in range(1, max_position + 1)}
+            for pos in range(1, max_position + 1):
+                if q_counts_a[pos] > q_counts_b[pos]:
+                    return 1
+                elif q_counts_b[pos] > q_counts_a[pos]:
+                    return -1
+        return 0
+
+    # Pre-2026: Sprint finishes secondary tie-breaker if provided
     if sprint_finishes_a is not None and sprint_finishes_b is not None:
         s_counts_a = {pos: sprint_finishes_a.count(pos) for pos in range(1, max_position + 1)}
         s_counts_b = {pos: sprint_finishes_b.count(pos) for pos in range(1, max_position + 1)}
@@ -488,16 +610,6 @@ def evaluate_fia_countback(
             if s_counts_a[pos] > s_counts_b[pos]:
                 return 1
             elif s_counts_b[pos] > s_counts_a[pos]:
-                return -1
-
-    # Tertiary tie-breaker: 2026 Qualifying fallback (Section A, Article A2.2)
-    if season >= 2026 and qualifying_finishes_a is not None and qualifying_finishes_b is not None:
-        q_counts_a = {pos: qualifying_finishes_a.count(pos) for pos in range(1, max_position + 1)}
-        q_counts_b = {pos: qualifying_finishes_b.count(pos) for pos in range(1, max_position + 1)}
-        for pos in range(1, max_position + 1):
-            if q_counts_a[pos] > q_counts_b[pos]:
-                return 1
-            elif q_counts_b[pos] > q_counts_a[pos]:
                 return -1
 
     return 0
