@@ -149,3 +149,115 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserProfile
+
+# ----------------- LIVE RACE CENTER SCHEMAS -----------------
+
+class SectorTimes(BaseModel):
+    sector_1: Optional[float] = None
+    sector_2: Optional[float] = None
+    sector_3: Optional[float] = None
+
+class DriverTimingEntry(BaseModel):
+    driver_number: int
+    driver_code: str
+    driver_name: str
+    team_name: str
+    team_color: str
+    position: int
+    grid: int
+    gap_to_leader: Optional[float] = None # Seconds behind leader (0.0 for leader)
+    interval: Optional[float] = None # Seconds behind car ahead
+    last_lap_time: Optional[float] = None
+    best_lap_time: Optional[float] = None
+    sectors: SectorTimes = SectorTimes()
+    current_lap: int = 0
+    in_pit: bool = False
+    pit_stops_count: int = 0
+    tire_compound: Optional[str] = None # "SOFT", "MEDIUM", "HARD", "INTERMEDIATE", "WET"
+    stint_lap_count: int = 0
+    status: str = "ON_TRACK" # "ON_TRACK", "IN_PIT", "OUT_OF_RACE"
+    positions_gained: int = 0 # grid - position
+
+class PitStopEvent(BaseModel):
+    driver_number: int
+    lap_number: int
+    pit_duration: Optional[float] = None
+    lane_duration: Optional[float] = None
+    timestamp: datetime
+
+class StintInfo(BaseModel):
+    driver_number: int
+    stint_number: int
+    compound: str
+    lap_start: int
+    lap_end: Optional[int] = None
+    tyre_age_at_start: int = 0
+
+class RaceControlMessage(BaseModel):
+    date: datetime
+    lap_number: Optional[int] = None
+    category: str
+    message: str
+    flag: Optional[str] = None # "GREEN", "YELLOW", "DOUBLE YELLOW", "RED", "CHEQUERED", "CLEAR", etc.
+    scope: Optional[str] = None
+    sector: Optional[int] = None
+
+class TrackWeather(BaseModel):
+    air_temperature: float = 0.0
+    track_temperature: float = 0.0
+    humidity: float = 0.0
+    pressure: float = 1013.0
+    wind_speed: float = 0.0
+    wind_direction: int = 0
+    rainfall: int = 0 # 0 = dry, 1 = wet
+    timestamp: datetime
+
+class CircuitCoord(BaseModel):
+    x: float
+    y: float
+
+class DriverMapPosition(BaseModel):
+    driver_number: int
+    driver_code: str
+    team_color: str
+    x: float
+    y: float
+    date: datetime
+
+class TelemetryEntry(BaseModel):
+    driver_number: int
+    speed: int
+    throttle: int
+    brake: int
+    n_gear: int
+    drs: int
+    rpm: int
+    timestamp: datetime
+
+class LiveSessionSnapshot(BaseModel):
+    session_id: str
+    session_name: str
+    circuit_name: str
+    total_laps: int
+    current_lap: int
+    status: SessionStatusEnum
+    data_state: DataStateEnum
+    track_status: str = "GREEN" # "GREEN", "YELLOW", "VSC", "SAFETY_CAR", "RED"
+    weather: Optional[TrackWeather] = None
+    timing_tower: List[DriverTimingEntry] = []
+    pit_stops: List[PitStopEvent] = []
+    stints: List[StintInfo] = []
+    race_control: List[RaceControlMessage] = []
+    driver_map_positions: List[DriverMapPosition] = []
+    telemetry: List[TelemetryEntry] = []
+    sequence_number: int = 0
+    provenance: ProvenanceMeta
+
+class LiveIncrementalUpdate(BaseModel):
+    type: str # "TIMING", "RACE_CONTROL", "WEATHER", "MAP_POSITIONS", "TELEMETRY", "HEARTBEAT"
+    session_id: str
+    sequence_number: int
+    timestamp: datetime
+    data_state: DataStateEnum
+    data: dict
+

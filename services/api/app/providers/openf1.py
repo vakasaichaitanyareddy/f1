@@ -172,3 +172,192 @@ class OpenF1Provider:
                 notes="Timing service temporarily unreachable"
             )
         }
+
+    async def get_drivers(self, session_key: str) -> List[Dict[str, Any]]:
+        """Fetches driver details for a session from OpenF1."""
+        try:
+            url = f"{self.BASE_URL}/drivers"
+            params = {"session_key": session_key}
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list):
+                    # Deduplicate by driver_number
+                    deduped = {}
+                    for d in data:
+                        num = d.get("driver_number")
+                        if num is not None:
+                            deduped[num] = d
+                    return list(deduped.values())
+        except Exception:
+            pass
+        return []
+
+    async def get_positions(self, session_key: str) -> List[Dict[str, Any]]:
+        """Fetches latest driver positions for a session."""
+        try:
+            url = f"{self.BASE_URL}/position"
+            params = {"session_key": session_key}
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list):
+                    # Sort or keep latest per driver_number
+                    latest_by_driver = {}
+                    for row in data:
+                        d_num = row.get("driver_number")
+                        if d_num is not None:
+                            latest_by_driver[d_num] = row
+                    return list(latest_by_driver.values())
+        except Exception:
+            pass
+        return []
+
+    async def get_laps(self, session_key: str) -> List[Dict[str, Any]]:
+        """Fetches lap timings for a session."""
+        try:
+            url = f"{self.BASE_URL}/laps"
+            params = {"session_key": session_key}
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+        return []
+
+    async def get_pit_stops(self, session_key: str) -> List[Dict[str, Any]]:
+        """Fetches pit stop events for a session."""
+        try:
+            url = f"{self.BASE_URL}/pit"
+            params = {"session_key": session_key}
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+        return []
+
+    async def get_stints(self, session_key: str) -> List[Dict[str, Any]]:
+        """Fetches tyre stints for a session."""
+        try:
+            url = f"{self.BASE_URL}/stints"
+            params = {"session_key": session_key}
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+        return []
+
+    async def get_weather(self, session_key: str) -> Optional[Dict[str, Any]]:
+        """Fetches latest track weather observations."""
+        try:
+            url = f"{self.BASE_URL}/weather"
+            params = {"session_key": session_key}
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list) and len(data) > 0:
+                    return data[-1] # Return the most recent weather record
+        except Exception:
+            pass
+        return None
+
+    async def get_race_control_messages(self, session_key: str) -> List[Dict[str, Any]]:
+        """Fetches race control messages for a session."""
+        try:
+            url = f"{self.BASE_URL}/race_control"
+            params = {"session_key": session_key}
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+        return []
+
+    async def get_driver_locations(self, session_key: str, date_from: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Fetches high-frequency car coordinate points if available."""
+        try:
+            url = f"{self.BASE_URL}/location"
+            params = {"session_key": session_key}
+            if date_from:
+                params["date>="] = date_from
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list):
+                    # Deduplicate to latest coordinate per driver_number
+                    latest_by_driver = {}
+                    for row in data:
+                        d_num = row.get("driver_number")
+                        if d_num is not None:
+                            latest_by_driver[d_num] = row
+                    return list(latest_by_driver.values())
+        except Exception:
+            pass
+        return []
+
+    async def get_telemetry_snapshot(self, session_key: str, date_from: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Fetches car telemetry (speed, throttle, brake, gear, drs, rpm)."""
+        try:
+            url = f"{self.BASE_URL}/car_data"
+            params = {"session_key": session_key}
+            if date_from:
+                params["date>="] = date_from
+            if self._client:
+                res = await self._client.get(url, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list):
+                    latest_by_driver = {}
+                    for row in data:
+                        d_num = row.get("driver_number")
+                        if d_num is not None:
+                            latest_by_driver[d_num] = row
+                    return list(latest_by_driver.values())
+        except Exception:
+            pass
+        return []

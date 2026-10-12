@@ -65,14 +65,14 @@
 ### Module D: Live Race Center (Release 2)
 | Feature ID | Name / Description | Release Target | Status | Dependencies | Verification Evidence & Criteria |
 |---|---|---|---|---|---|
-| D1-01 | OpenF1 & FastF1 backend data adapter with quota & retry handling | R2 | [IN_PROGRESS] | J1-01 | OpenF1 provider adapter implemented with rate limit & timeout handling |
-| D1-02 | Data freshness status indicator (LIVE, DELAYED, STALE, HISTORICAL, UNAVAILABLE) | R2 | [DONE] | D1-01 | `is_stale()` logic verified with threshold check |
-| D2-01 | Live Timing Tower (Position, Interval, Gap to Leader, Lap, S1/S2/S3, Best Lap) | R2 | [TODO] | D1-01 | Scheduled for Release 2 live engine |
-| D2-02 | Tire compound indicator and stint age tracker | R2 | [TODO] | D2-01 | Design tokens ready; scheduled for Release 2 |
-| D3-01 | Live Race Control messages feed (Flags, VSC, SC, Red Flag, Penalties, Investigations) | R2 | [TODO] | D1-01 | Scheduled for Release 2 |
-| D4-01 | Interactive Track Map (SVG / Canvas circuit geometry, driver positions, sectors) | R2 | [TODO] | D1-01 | Scheduled for Release 2 |
-| D5-01 | Telemetry overlay (Speed, Throttle, Brake, Gear, RPM, DRS status comparison) | R2 | [TODO] | D1-01 | Scheduled for Release 2 |
-| D6-01 | Real-time WebSocket streaming with snapshot + delta resynchronization | R2 | [TODO] | J2-04 | Scheduled for Release 2 |
+| D1-01 | OpenF1 & FastF1 backend data adapter with quota & retry handling | R2 | [DONE] | J1-01 | OpenF1Provider adapter implemented with endpoints for drivers, positions, laps, pit stops, stints, weather, race control, location, and telemetry |
+| D1-02 | Data freshness status indicator (LIVE, DELAYED, STALE, HISTORICAL, UNAVAILABLE) | R2 | [DONE] | D1-01 | Explicit provenance tagging with 30-second stale detection threshold |
+| D2-01 | Live Timing Tower (Position, Interval, Gap to Leader, Lap, S1/S2/S3, Best Lap) | R2 | [DONE] | D1-01 | Web & mobile timing towers with gaps, intervals, lap times, sector splits, and position deltas |
+| D2-02 | Tire compound indicator and stint age tracker | R2 | [DONE] | D2-01 | Tire compound badges (Soft, Medium, Hard, Intermediate, Wet) with stint age counter |
+| D3-01 | Live Race Control messages feed (Flags, VSC, SC, Red Flag, Penalties, Investigations) | R2 | [DONE] | D1-01 | Dedicated Race Control timeline feed with official flag badges and track status tracking |
+| D4-01 | Interactive Track Map (SVG / Canvas circuit geometry, driver positions, sectors) | R2 | [DONE] | D1-01 | Interactive SVG circuit map with official track ribbon, start/finish line, and live car location beacons |
+| D5-01 | Telemetry overlay (Speed, Throttle, Brake, Gear, RPM, DRS status comparison) | R2 | [DONE] | D1-01 | Driver Telemetry Inspector with real-time speed, throttle %, gear, and DRS indicator |
+| D6-01 | Real-time WebSocket streaming with snapshot + delta resynchronization | R2 | [DONE] | J2-04 | `/ws/live/{session_id}` endpoint with heartbeat ping/pong, RESYNC requests, sequence tracking, and backpressure queueing |
 
 ---
 

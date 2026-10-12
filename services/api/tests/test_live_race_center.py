@@ -1,0 +1,145 @@
+import pytest
+import json
+import asyncio
+from datetime import datetime, timezone
+import httpx
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.racing.live_manager import LiveSessionManager, live_session_manager
+from app.racing.fixtures import BAHRAIN_2024_LIVE_FIXTURE
+from app.racing.models import DataStateEnum, SessionStatusEnum
+from app.racing.schemas import LiveIncrementalUpdate
+from app.providers.openf1 import OpenF1Provider
+
+def test_live_manager_fixture_snapshot():
+    mgr = LiveSessionManager()
+    mgr.register_fixture_session("test_sess", BAHRAIN_2024_LIVE_FIXTURE)
+    snapshot = mgr._build_snapshot_from_fixture("test_sess", BAHRAIN_2024_LIVE_FIXTURE)
+    
+    assert snapshot.session_id == "test_sess"
+    assert snapshot.current_lap == 32
+    assert snapshot.total_laps == 57
+    assert len(snapshot.timing_tower) == 8
+    assert snapshot.timing_tower[0].driver_code == "VER"
+    assert snapshot.timing_tower[0].position == 1
+    assert snapshot.timing_tower[1].driver_code == "PER"
+    assert snapshot.timing_tower[1].positions_gained == 3
+    assert snapshot.provenance.is_test_fixture is True
+    assert snapshot.provenance.data_state == DataStateEnum.HISTORICAL
+    assert snapshot.weather.track_temperature == 24.2
+    assert len(snapshot.pit_stops) == 5
+    assert len(snapshot.race_control) == 5
+
+def test_live_snapshot_rest_endpoint():
+    client = TestClient(app)
+    # 2024_01_race is registered in lifespan
+    live_session_manager.register_fixture_session("2024_01_race", BAHRAIN_2024_LIVE_FIXTURE)
+    response = client.get("/api/v1/live/2024_01_race/snapshot")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["session_id"] == "2024_01_race"
+    assert data["current_lap"] == 32
+    assert data["provenance"]["is_test_fixture"] is True
+    assert len(data["timing_tower"]) >= 8
+
+def test_live_snapshot_not_found():
+    client = TestClient(app)
+    response = client.get("/api/v1/live/nonexistent_session/snapshot")
+    assert response.status_code == 404
+
+def test_live_websocket_connection_and_heartbeat():
+    client = TestClient(app)
+    live_session_manager.register_fixture_session("2024_01_race", BAHRAIN_2024_LIVE_FIXTURE)
+    with client.websocket_connect("/ws/live/2024_01_race") as ws:
+        # First message is SNAPSHOT
+        first_raw = ws.receive_text()
+        first_msg = json.loads(first_raw)
+        assert first_msg["type"] == "SNAPSHOT"
+        assert first_msg["session_id"] == "2024_01_race"
+        assert first_msg["payload"]["current_lap"] == 32
+        
+        # Send PING heartbeat
+        ws.send_text(json.dumps({"type": "PING"}))
+        pong_raw = ws.receive_text()
+        pong = json.loads(pong_raw)
+        assert pong["type"] == "PONG"
+        assert "timestamp" in pong
+
+        # Send RESYNC request
+        ws.send_text(json.dumps({"type": "RESYNC"}))
+        resync_raw = ws.receive_text()
+        resync = json.loads(resync_raw)
+        assert resync["type"] == "SNAPSHOT"
+        assert resync["session_id"] == "2024_01_race"
+
+@pytest.mark.asyncio
+async def test_live_incremental_update_and_backpressure():
+    mgr = LiveSessionManager()
+    queue = mgr.subscribe("sess_1")
+    
+    update = LiveIncrementalUpdate(
+        type="TIMING",
+        session_id="sess_1",
+        sequence_number=1,
+        timestamp=datetime.now(timezone.utc),
+        data_state=DataStateEnum.HISTORICAL,
+        data={"current_lap": 33}
+    )
+    await mgr.broadcast_update("sess_1", update)
+    
+    received = await queue.get()
+    assert received.type == "TIMING"
+    assert received.data["current_lap"] == 33
+    
+    mgr.unsubscribe("sess_1", queue)
+    assert queue not in mgr._subscriber_queues["sess_1"]
+
+@pytest.mark.asyncio
+async def test_provider_adapter_endpoints_mock():
+    # Test provider methods with mock client
+    async def handler(request: httpx.Request):
+        url = str(request.url)
+        if "drivers" in url:
+            return httpx.Response(200, json=[
+                {"driver_number": 1, "name_acronym": "VER", "full_name": "Max Verstappen", "team_name": "Red Bull Racing", "team_colour": "3671c6"}
+            ])
+        elif "position" in url:
+            return httpx.Response(200, json=[
+                {"driver_number": 1, "position": 1}
+            ])
+        elif "intervals" in url:
+            return httpx.Response(200, json=[
+                {"driver_number": 1, "gap_to_leader": 0.0, "interval": 0.0}
+            ])
+        elif "laps" in url:
+            return httpx.Response(200, json=[
+                {"driver_number": 1, "lap_number": 10, "lap_duration": 92.5}
+            ])
+        elif "weather" in url:
+            return httpx.Response(200, json=[
+                {"air_temperature": 20.5, "track_temperature": 28.0, "humidity": 50.0}
+            ])
+        elif "race_control" in url:
+            return httpx.Response(200, json=[
+                {"lap_number": 1, "category": "Flag", "flag": "GREEN", "message": "TRACK CLEAR"}
+            ])
+        return httpx.Response(200, json=[])
+
+    mock_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenF1Provider(client=mock_client)
+    
+    drivers = await provider.get_drivers("9472")
+    assert len(drivers) == 1
+    assert drivers[0]["name_acronym"] == "VER"
+    
+    positions = await provider.get_positions("9472")
+    assert len(positions) == 1
+    assert positions[0]["position"] == 1
+    
+    weather = await provider.get_weather("9472")
+    assert weather["air_temperature"] == 20.5
+    
+    rc = await provider.get_race_control_messages("9472")
+    assert len(rc) == 1
+    assert rc[0]["flag"] == "GREEN"

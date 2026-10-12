@@ -14,8 +14,10 @@ from app.racing.schemas import (
     MeetingRead, DriverWithConstructor, ConstructorWithDrivers,
     DriverStandingRead, ConstructorStandingRead, RaceClassificationRead,
     RaceResultEntryRead, ProvenanceMeta, UserCreate, UserLogin,
-    UserProfile, UserPreferencesUpdate, TokenResponse
+    UserProfile, UserPreferencesUpdate, TokenResponse,
+    LiveSessionSnapshot, LiveIncrementalUpdate
 )
+from app.racing.live_manager import live_session_manager
 from app.identity.security import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, get_current_user_optional
@@ -363,3 +365,25 @@ async def get_championship_intelligence(
             "notes": "Calculated over 2024 development seed baseline."
         }
     }
+
+# ----------------- LIVE RACE CENTER REST ENDPOINTS -----------------
+
+@api_router.get("/live/{session_id}/snapshot", response_model=LiveSessionSnapshot)
+async def get_live_snapshot(session_id: str):
+    """
+    Returns current live timing, tower, weather, and race control snapshot.
+    If session is not in cache, attempts to load from deterministic fixture or OpenF1.
+    """
+    snapshot = await live_session_manager.get_current_snapshot(session_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail=f"Live session {session_id} not active or available.")
+    return snapshot
+
+@api_router.post("/live/{session_id}/sync")
+async def trigger_live_sync(session_id: str, openf1_key: str = "9472", is_live: bool = False):
+    """
+    Synchronizes session data directly from OpenF1 provider,
+    building a fresh snapshot and broadcasting incremental updates.
+    """
+    snapshot = await live_session_manager.ingest_session_data(session_id, openf1_key, is_live_stream=is_live)
+    return {"status": "synced", "session_id": session_id, "data_state": snapshot.data_state, "sequence_number": snapshot.sequence_number}

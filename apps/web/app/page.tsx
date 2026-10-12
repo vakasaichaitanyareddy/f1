@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { 
   Trophy, Calendar, Flag, Activity, ShieldCheck, 
-  ChevronRight, Gauge, Layers, Info
+  ChevronRight, Gauge, Layers, Info, Radio
 } from "lucide-react";
+import LiveRaceCenter from "./components/LiveRaceCenter";
 
 interface DriverStanding {
   position: number;
@@ -56,7 +57,7 @@ interface Meeting {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"home" | "championship" | "calendar">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "live" | "championship" | "calendar">("live");
   const [spoilerShield, setSpoilerShield] = useState(false);
   const [standings, setStandings] = useState<DriverStanding[]>([]);
   const [champIntel, setChampIntel] = useState<ChampionshipIntelligence | null>(null);
@@ -97,6 +98,15 @@ export default function Home() {
           </div>
 
           <nav className="hidden md:flex space-x-1">
+            <button
+              onClick={() => setActiveTab("live")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-bold transition ${
+                activeTab === "live" ? "bg-[#E10600] text-white" : "text-[#8F96A3] hover:text-white"
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5 animate-pulse" />
+              <span>Live Race Center</span>
+            </button>
             <button
               onClick={() => setActiveTab("home")}
               className={`px-3 py-1.5 rounded-md text-sm font-semibold transition ${
@@ -178,6 +188,11 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* Tab: Live Race Center */}
+        {activeTab === "live" && (
+          <LiveRaceCenter sessionId="2024_01_race" spoilerShield={spoilerShield} />
+        )}
 
         {/* Tab 1: Dashboard */}
         {activeTab === "home" && (

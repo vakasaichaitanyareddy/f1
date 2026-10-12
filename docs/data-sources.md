@@ -34,7 +34,22 @@ Every response from `/api/v1/...` that supplies session results or championship 
 2. **Live Data Transparency**: Historical sessions are never labeled `LIVE`. If an active session timing feed stops transmitting for > 30 seconds, it is immediately labeled `STALE`.
 3. **Provider Outages**: When upstream providers return HTTP 429 (rate limited), HTTP 5xx, or network timeouts, the system returns an empty payload with `data_state: "UNAVAILABLE"` and descriptive failure notes rather than synthesized placeholder data.
 
-## 3. Known Limitations & Stabilization Notes (Release 1.1)
-- **Local Development Database**: Defaults to `sqlite+aiosqlite` for lightweight, zero-dependency local runs and unit testing. Production and Docker Compose use `postgresql+asyncpg` with Alembic migration versioning (`b1af478a9ca2`).
-- **Redis Cache Fallback**: When Redis is unavailable locally, `RedisClient` degrades gracefully without throwing unhandled exceptions.
-- **Sprint Schedule Scope**: Current development seed includes round 1 (Bahrain GP 2024). Full 24-round calendar session ingestion from FastF1/Jolpica is scheduled for subsequent data pipelines.
+## 3. Live Race Center Ingestion & Delivery (Release 2)
+1. **Live Provider Architecture**:
+   - Upstream API: `https://api.openf1.org/v1` (Community timing provider)
+   - Endpoints supported: `/sessions`, `/drivers`, `/position`, `/intervals`, `/laps`, `/pit`, `/stints`, `/weather`, `/race_control`, `/location`, `/car_data`.
+   - Credentials & API calls: Retained strictly on backend; never exposed to web or mobile clients.
+2. **WebSocket Real-Time Delivery (`/ws/live/{session_id}`)**:
+   - Initial Message: Complete `SNAPSHOT` (`LiveSessionSnapshot`) containing timing tower, pit stops, stints, race control, track map coordinates, weather, and provenance.
+   - Streaming Updates: Incremental deltas (`TIMING`, `RACE_CONTROL`, `WEATHER`, `MAP_POSITIONS`, `TELEMETRY`) with monotonic sequence numbers.
+   - Heartbeat & Resync: Ping/Pong frame every 15 seconds; `RESYNC` request triggers full fresh snapshot.
+   - Backpressure Protection: Max subscriber queue size of 100 with oldest-message eviction on slow clients.
+3. **Circuit Geometry & Track Coordinates**:
+   - Verified FIA track path coordinates for Bahrain International Circuit (`5.412 km`).
+   - High-frequency car coordinates from `/location` normalized to track SVG viewport.
+
+## 4. Known Limitations & Stabilization Notes (Release 2)
+- **Local Development Database**: Uses `postgresql+asyncpg` in Docker Compose (loopback binding `127.0.0.1:8000`) and `sqlite+aiosqlite` for offline local unit test runs.
+- **Upstream OpenF1 Quotas**: OpenF1 free tier applies rate limiting (HTTP 429). The backend caches full snapshots in Redis (1h TTL) to shield upstream endpoints and protect client streaming stability.
+- **Sprint Schedule Scope**: Development seed includes Round 1 (Bahrain GP 2024 archive). Real-time live streaming activates automatically when an active Grand Prix session key is supplied.
+
