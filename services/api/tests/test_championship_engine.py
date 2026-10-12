@@ -247,12 +247,14 @@ def test_countback_sprint_vs_grand_prix():
     sprints_b = [2, 2, 2, 2, 2]
 
     # B wins based on GP finishing positions despite A having 5 sprint wins
-    assert evaluate_fia_countback(gp_a, gp_b, sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b) == -1
+    assert evaluate_fia_countback(gp_a, gp_b, sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b, season=2024) == -1
 
-    # If GP finishes are identical, sprint finishes break the tie
+    # Under Article 7.2 for pre-2026 seasons (e.g. 2024), if Grand Prix race finishes are identical,
+    # Sprint results are NOT a statutory tie-breaker under the regulations.
+    # The tie is unresolved and subject to FIA discretion under Article 7.2(d), returning 0.
     gp_tied_a = [1, 1, 2]
     gp_tied_b = [1, 1, 2]
-    assert evaluate_fia_countback(gp_tied_a, gp_tied_b, sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b) == 1
+    assert evaluate_fia_countback(gp_tied_a, gp_tied_b, sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b, season=2024) == 0
 
 # 16. 2026 Grand Prix Scoring Gate (Section A, Issue 03, Article A2.2)
 def test_2026_grand_prix_consecutive_green_laps_gate():
@@ -346,7 +348,8 @@ def test_2026_countback_qualifying_fallback():
         season=2026,
     ) == 0
 
-    # In pre-2026 seasons (e.g. 2024), qualifying fallback was not an official statutory step
+    # In pre-2026 seasons (e.g. 2024), neither sprint nor qualifying is an official statutory countback step under Article 7.2.
+    # When Grand Prix finishes are identical, the outcome is unresolved (returns 0, subject to FIA discretion).
     assert evaluate_fia_countback(
         gp_finishes,
         gp_finishes,
@@ -355,7 +358,7 @@ def test_2026_countback_qualifying_fallback():
         qualifying_finishes_a=[1, 1, 3],
         qualifying_finishes_b=[1, 2, 2],
         season=2024,
-    ) == -1  # In 2024, sprint finishes broke the tie before qualifying!
+    ) == 0
 
 # 19. 2026 Provenance Metadata Independence
 def test_2026_regulation_provenance_independence():
@@ -475,6 +478,79 @@ def test_2014_finale_derived_from_official_round_metadata():
 
     # Round 19 of other seasons (e.g. 2024 round 19): NEVER awards double points
     assert calculate_grand_prix_points(1, season=2024, round_number=19, total_rounds=24) == 25.0
+
+# 24. Season-Specific Countback Regression Suite (2021, 2022, 2025, 2026)
+def test_season_specific_countback_behavior():
+    # Common scenarios for identical GP results
+    gp_tied = [1, 1, 2, 3]  # Both have 2 wins, 1 second, 1 third
+    sprints_a = [1, 1]      # Driver A has 2 sprint wins
+    sprints_b = [2, 3]      # Driver B has 0 sprint wins
+    quali_a = [1, 1, 1]     # Driver A has 3 poles
+    quali_b = [2, 2, 2]     # Driver B has 0 poles
+
+    # A) 2021 Season (Inaugural Sprint Qualifying era, Article 7.2)
+    # Under 2021 Art 7.2, sprint and qualifying results are not statutory countback criteria.
+    # Tied GP finishes -> unresolved / FIA nomination -> returns 0.
+    assert evaluate_fia_countback(
+        gp_tied, gp_tied,
+        sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b,
+        qualifying_finishes_a=quali_a, qualifying_finishes_b=quali_b,
+        season=2021,
+    ) == 0
+
+    # B) 2022 Season (Sprint format expansion to top 8, Article 7.2)
+    # Under 2022 Art 7.2, tie-breaker is exclusively GP finishes.
+    # Sprint and qualifying differences do not alter the statutory result -> returns 0.
+    assert evaluate_fia_countback(
+        gp_tied, gp_tied,
+        sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b,
+        qualifying_finishes_a=quali_a, qualifying_finishes_b=quali_b,
+        season=2022,
+    ) == 0
+
+    # C) 2025 Season (Fastest lap bonus rescinded, Article 7.2)
+    # Under 2025 Art 7.2, identical GP finishes fail to produce a winner -> returns 0 (Art 7.2(d)).
+    assert evaluate_fia_countback(
+        gp_tied, gp_tied,
+        sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b,
+        qualifying_finishes_a=quali_a, qualifying_finishes_b=quali_b,
+        season=2025,
+    ) == 0
+
+    # D) 2026 Season (Section A, Article A2.1.4(c))
+    # Direct statutory fallback to Qualifying results: Driver A (3 poles) wins over Driver B (0 poles)!
+    assert evaluate_fia_countback(
+        gp_tied, gp_tied,
+        sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b,
+        qualifying_finishes_a=quali_a, qualifying_finishes_b=quali_b,
+        season=2026,
+    ) == 1
+
+    # In 2026, if Driver B has more poles, Driver B wins (-1):
+    assert evaluate_fia_countback(
+        gp_tied, gp_tied,
+        sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b,
+        qualifying_finishes_a=quali_b, qualifying_finishes_b=quali_a,
+        season=2026,
+    ) == -1
+
+    # In 2026, sprint finishes do not override qualifying fallback:
+    # Driver A has better sprints, but Driver B has better qualifying -> Driver B wins (-1)
+    assert evaluate_fia_countback(
+        gp_tied, gp_tied,
+        sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b,
+        qualifying_finishes_a=[2, 2], qualifying_finishes_b=[1, 2],
+        season=2026,
+    ) == -1
+
+    # If 2026 qualifying results are also identical, returns 0 (unresolved / FIA discretion):
+    assert evaluate_fia_countback(
+        gp_tied, gp_tied,
+        sprint_finishes_a=sprints_a, sprint_finishes_b=sprints_b,
+        qualifying_finishes_a=[1, 2], qualifying_finishes_b=[1, 2],
+        season=2026,
+    ) == 0
+
 
 
 

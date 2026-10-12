@@ -62,12 +62,12 @@ All rules are verified against official FIA Sporting Regulations, WMSC bulletins
 - When two or more competitors finish in a dead-heat or tie for finishing positions, the points for all tied positions are aggregated and divided equally among them (decimal points permitted).
 - Verified in `calculate_shared_points()` and tested against tied P1 finishes (21.5 pts in modern era; 43.0 pts in 2014 finale).
 
-### 3.5. Tie-Breaking Countback Hierarchy (Article 7.2)
+### 3.5. Tie-Breaking Countback Hierarchy (Historical Seasons 1991–2025: Article 7.2)
 1. Most 1st place finishes in Grand Prix races.
 2. Most 2nd place finishes in Grand Prix races.
-3. Most 3rd place finishes, descending to 24th place.
-4. Sprint race results do not count as Grand Prix race wins and are considered as a secondary criterion.
-5. If completely tied, the FIA will nominate the winner according to criteria deemed fit.
+3. Most 3rd place finishes, descending sequentially down to 24th place.
+4. **No Sprint or Qualifying Intermediate Stages:** Under Article 7.2, sprint race results (introduced in 2021) and qualifying results are not statutory countback tie-breakers. Sprint victories or points do not alter Grand Prix finishing position tallies.
+5. **FIA Discretion on Dead Heat (Article 7.2(d)):** If comparison of all Grand Prix finishing positions fails to produce a winner, Article 7.2(d) explicitly mandates that *"the FIA will nominate the winner according to such criteria as it thinks fit."* In this scenario, the calculation engine returns an unresolved tie (`0`), leaving the outcome to official FIA determination.
 
 ### 3.6. Constructor Points Capacity
 - In every Grand Prix or Sprint, constructors can score points for up to **two cars**.

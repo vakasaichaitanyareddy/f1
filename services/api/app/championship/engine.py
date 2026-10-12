@@ -567,18 +567,31 @@ def evaluate_fia_countback(
     season: int = 2024,
 ) -> int:
     """
-    Evaluates FIA countback rule for tied championship points:
-    1. Compares number of Grand Prix 1st places, then 2nd places, then 3rd places, etc.
-    2. Under FIA Sporting Regulations Article 7.2, Sprint race results are NOT included in Grand Prix
-       race countbacks; they are considered only as a secondary check if full GP finishing positions
-       are completely identical.
-    3. 2026 Ruleset (Section A, Issue 03, Article A2.2 & Section B, Issue 09, October 1, 2026):
-       If race results (and sprint results) cannot resolve a tie, countback falls back to Qualifying results
-       (comparing most 1st places / pole positions in qualifying, then 2nd, 3rd, etc.).
+    Evaluates FIA countback rule for tied championship points across all supported seasons (1991–2026).
+    Applicable to both Drivers' and Constructors' Championships:
+
+    1. Primary Statutory Criteria (All Seasons 1991–2026):
+       Compares the greatest number of first places in Grand Prix races. If equal, compares the greatest
+       number of second places in Grand Prix races, then third places, and so on down to `max_position`.
+
+    2. 2026 Season (FIA Technical & Sporting Regulations Section A, Article A2.1.4(c)):
+       If Grand Prix race finishes cannot produce a winner, countback falls back directly to
+       Qualifying results (comparing most pole positions / 1st places in qualifying, then 2nd, 3rd, etc.).
+       Sprint race results are not an intervening statutory tie-break stage in 2026.
+       If still completely tied on both GP and Qualifying finishes, returns 0 (unresolved / FIA nomination).
+
+    3. Historical Seasons (1991–2025 under FIA Sporting Regulations Article 7.2 / Dead Heat rules):
+       The official regulations specify ONLY a countback of finishing positions in races (Grand Prix races).
+       Sprint races (introduced in 2021) and qualifying sessions are NOT statutory tie-breakers under Article 7.2.
+       Article 7.2(d) explicitly mandates: "If this procedure fails to produce a result, the FIA will nominate
+       the winner according to such criteria as it thinks fit."
+       Therefore, when Grand Prix race-result counts are identical, this engine does not invent a sprint-result
+       or qualifying-result winner: it returns 0, clearly representing an unresolved tie subject to FIA discretion.
+
     Returns:
-       1 if competitor A finishes ahead
-      -1 if competitor B finishes ahead
-       0 if completely tied on all countback criteria (FIA discretion)
+       1 if competitor A finishes ahead on statutory countback
+      -1 if competitor B finishes ahead on statutory countback
+       0 if unresolved / completely tied on all governing regulatory criteria (subject to FIA nomination)
     """
     counts_a = {pos: finishes_a.count(pos) for pos in range(1, max_position + 1)}
     counts_b = {pos: finishes_b.count(pos) for pos in range(1, max_position + 1)}
@@ -590,7 +603,7 @@ def evaluate_fia_countback(
             return -1
 
     # 2026 Ruleset (Section A, Article A2.1.4(c)):
-    # Fallback directly to Qualifying results if Grand Prix finishing positions cannot resolve tie
+    # Fallback directly to Qualifying results if Grand Prix finishing positions cannot resolve tie.
     if season >= 2026:
         if qualifying_finishes_a is not None and qualifying_finishes_b is not None:
             q_counts_a = {pos: qualifying_finishes_a.count(pos) for pos in range(1, max_position + 1)}
@@ -602,16 +615,11 @@ def evaluate_fia_countback(
                     return -1
         return 0
 
-    # Pre-2026: Sprint finishes secondary tie-breaker if provided
-    if sprint_finishes_a is not None and sprint_finishes_b is not None:
-        s_counts_a = {pos: sprint_finishes_a.count(pos) for pos in range(1, max_position + 1)}
-        s_counts_b = {pos: sprint_finishes_b.count(pos) for pos in range(1, max_position + 1)}
-        for pos in range(1, max_position + 1):
-            if s_counts_a[pos] > s_counts_b[pos]:
-                return 1
-            elif s_counts_b[pos] > s_counts_a[pos]:
-                return -1
-
+    # Historical Seasons (1991–2025, Article 7.2):
+    # Under Article 7.2, sprint results and qualifying results are not part of the statutory countback.
+    # If Grand Prix race finishes fail to produce a winner, Article 7.2(d) applies:
+    # "the FIA will nominate the winner according to such criteria as it thinks fit."
+    # The mathematical engine returns 0 (unresolved / FIA discretion).
     return 0
 
 def is_mathematically_eliminated(
