@@ -115,7 +115,7 @@ def test_penalty_point_deductions():
     # Penalty cannot result in negative points
     assert calculate_grand_prix_points(10, penalty_points_deduction=5.0, season=2024) == 0.0
 
-# 8. Sprint Points Regulations (2021 vs 2022-Present)
+# 8. Sprint Points Regulations (2021 vs 2022–2025 vs 2026 Article A2.2.2)
 def test_sprint_points_regulations():
     # 2021 Sprint Qualifying: Top 3 only (3, 2, 1)
     assert calculate_sprint_points(1, season=2021) == 3.0
@@ -123,10 +123,21 @@ def test_sprint_points_regulations():
     assert calculate_sprint_points(3, season=2021) == 1.0
     assert calculate_sprint_points(4, season=2021) == 0.0
 
-    # 2022-Present: Top 8 (8 to 1)
-    assert calculate_sprint_points(1, season=2024) == 8.0
-    assert calculate_sprint_points(8, season=2024) == 1.0
-    assert calculate_sprint_points(9, season=2024) == 0.0
+    # 2022–2025: Top 8 scale (8, 7, 6, 5, 4, 3, 2, 1) across all eight positions
+    expected_2022_2025 = {1: 8.0, 2: 7.0, 3: 6.0, 4: 5.0, 5: 4.0, 6: 3.0, 7: 2.0, 8: 1.0}
+    for season_check in [2022, 2023, 2024, 2025]:
+        for pos, expected_pts in expected_2022_2025.items():
+            assert calculate_sprint_points(pos, season=season_check) == expected_pts
+        assert calculate_sprint_points(9, season=season_check) == 0.0
+        assert calculate_sprint_points(10, season=season_check) == 0.0
+
+    # 2026: Section A, Issue 03, Article A2.2.2 scale (8, 7, 6, 5, 4, 3, 2) to positions 1–7;
+    # Eighth place and below award zero points (P8=0.0)!
+    expected_2026 = {1: 8.0, 2: 7.0, 3: 6.0, 4: 5.0, 5: 4.0, 6: 3.0, 7: 2.0, 8: 0.0}
+    for pos, expected_pts in expected_2026.items():
+        assert calculate_sprint_points(pos, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=2) == expected_pts
+    assert calculate_sprint_points(9, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=2) == 0.0
+    assert calculate_sprint_points(10, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=2) == 0.0
 
 # 9. Countback Tie-Break Resolution
 def test_fia_countback_resolution():
@@ -294,14 +305,19 @@ def test_2026_sprint_scoring_gates():
     assert calculate_sprint_points(8, season=2026, distance_completed_ratio=0.45, consecutive_green_laps=3) == 0.0
 
     # Case C: Exactly 50% distance (0.50) with exactly 2 consecutive green laps -> POINTS AWARDED!
-    # P1 = 8.0, P2 = 7.0, P8 = 1.0, P9 = 0.0
+    # Under Section A, Issue 03, Article A2.2.2:
+    # P1=8, P2=7, P3=6, P4=5, P5=4, P6=3, P7=2.
+    # Eighth place and below award zero points (P8=0.0, P9=0.0)!
     assert calculate_sprint_points(1, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 8.0
     assert calculate_sprint_points(2, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 7.0
-    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 1.0
+    assert calculate_sprint_points(7, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 2.0
+    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 0.0
     assert calculate_sprint_points(9, season=2026, distance_completed_ratio=0.50, consecutive_green_laps=2) == 0.0
 
     # Case D: Full sprint distance (100%) with 10 green laps
     assert calculate_sprint_points(1, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 8.0
+    assert calculate_sprint_points(7, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 2.0
+    assert calculate_sprint_points(8, season=2026, distance_completed_ratio=1.0, consecutive_green_laps=10) == 0.0
 
 # 18. 2026 Championship Countback Fallback to Qualifying Results (Section A, Article A2.1.4(c))
 def test_2026_countback_qualifying_fallback():

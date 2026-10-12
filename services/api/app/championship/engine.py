@@ -23,12 +23,13 @@ REGULATION_PROVENANCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "fia_document": "FIA Formula One World Championship Sporting Regulations — 2026 Technical & Sporting Regulations",
         "document_version": "Section A, Issue 03 & Section B, Issue 09 (Published October 1, 2026)",
         "source_url": "https://www.fia.com/regulation/category/110",
-        "source_reference": "Section A, Article A2.2 (Points scales, 2-consecutive green-flag laps condition, sprint >=50% distance condition); Section A, Article A2.1.4(c) (Championship countback fallback to Qualifying results)",
+        "source_reference": "Section A, Article A2.2.1 (Grand Prix points & 2-consecutive green laps gate); Section A, Article A2.2.2 (Sprint points scale 8-7-6-5-4-3-2 to Top 7 & >=50% distance gate); Section A, Article A2.1.4(c) (Championship countback fallback to Qualifying results)",
         "fl_bonus_active": False,
         "fl_distance_threshold": None,
         "double_points_final_round": False,
         "consecutive_green_laps_required": 2,
         "sprint_min_distance_ratio": 0.50,
+        "sprint_points_scale": "8-7-6-5-4-3-2 (Top 7)",
         "countback_qualifying_fallback": True,
     },
     "2025": {
@@ -142,8 +143,8 @@ ERA_1991_2002_POINTS: Dict[int, float] = {
     6: 1.0,
 }
 
-# Modern Sprint Points (2022–present, P1 to P8)
-SPRINT_POINTS_2022_PRESENT: Dict[int, float] = {
+# 2022–2025 Sprint Points (Top 8: 8 down to 1)
+SPRINT_POINTS_2022_2025: Dict[int, float] = {
     1: 8.0,
     2: 7.0,
     3: 6.0,
@@ -154,7 +155,21 @@ SPRINT_POINTS_2022_PRESENT: Dict[int, float] = {
     8: 1.0,
 }
 
-# 2021 Inaugural Sprint Qualifying Points (P1 to P3)
+# Alias for backwards compatibility
+SPRINT_POINTS_2022_PRESENT = SPRINT_POINTS_2022_2025
+
+# 2026 Sprint Points (FIA Section A, Issue 03, Article A2.2.2: Top 7 award 8–7–6–5–4–3–2; 8th place and below: 0 pts)
+SPRINT_POINTS_2026: Dict[int, float] = {
+    1: 8.0,
+    2: 7.0,
+    3: 6.0,
+    4: 5.0,
+    5: 4.0,
+    6: 3.0,
+    7: 2.0,
+}
+
+# 2021 Inaugural Sprint Qualifying Points (P1 to P3: 3–2–1)
 SPRINT_POINTS_2021: Dict[int, float] = {
     1: 3.0,
     2: 2.0,
@@ -494,8 +509,10 @@ def calculate_sprint_points(
 
     if season == 2021:
         return SPRINT_POINTS_2021.get(position, 0.0)
-    elif season >= 2022:
-        return SPRINT_POINTS_2022_PRESENT.get(position, 0.0)
+    elif 2022 <= season <= 2025:
+        return SPRINT_POINTS_2022_2025.get(position, 0.0)
+    elif season >= 2026:
+        return SPRINT_POINTS_2026.get(position, 0.0)
     return 0.0
 
 def calculate_max_remaining_points(
@@ -507,10 +524,12 @@ def calculate_max_remaining_points(
 ) -> float:
     """
     Maximum points a single driver or constructor could mathematically score in the remainder of the season.
-    - Driver 2019-2024: 25 (win) + 1 (FL) = 26 pts per GP + 8 pts per Sprint.
-    - Driver 2025 onward: 25 (win) + 0 (FL rescinded) = 25 pts per GP + 8 pts per Sprint.
+    - Driver 2019-2024: 25 (win) + 1 (FL) = 26 pts per GP + 8 pts per Sprint (P1=8).
+    - Driver 2025: 25 (win) + 0 (FL rescinded) = 25 pts per GP + 8 pts per Sprint (P1=8).
+    - Driver 2026: 25 (win) + 0 (FL rescinded) = 25 pts per GP + 8 pts per Sprint (P1=8 under Art A2.2.2).
     - Constructor 2019-2024: 25 + 18 + 1 (FL) = 44 pts per GP + (8 + 7) = 15 pts per Sprint (2 cars score).
-    - Constructor 2025 onward: 25 + 18 = 43 pts per GP + 15 pts per Sprint.
+    - Constructor 2025: 25 + 18 = 43 pts per GP + (8 + 7) = 15 pts per Sprint.
+    - Constructor 2026: 25 + 18 = 43 pts per GP + (8 + 7) = 15 pts per Sprint (P1=8, P2=7 under Art A2.2.2).
     - 2014 Double Points: If season == 2014 and final_event_included, the final GP awards double base points
       (Driver: 50 pts; Constructor: 50 + 36 = 86 pts).
     """
@@ -522,7 +541,12 @@ def calculate_max_remaining_points(
         fl_potential = 1.0 if (2019 <= season <= 2024) else 0.0
         standard_gp_win = MODERN_GP_POINTS[1] if season >= 2010 else ERA_2003_2009_POINTS[1]
         standard_gp_max = standard_gp_win + fl_potential
-        sprint_max = 8.0 if season >= 2022 else (3.0 if season == 2021 else 0.0)
+        if season >= 2022:
+            sprint_max = 8.0  # P1 awards 8 pts in both 2022-2025 and 2026 (Art A2.2.2)
+        elif season == 2021:
+            sprint_max = 3.0
+        else:
+            sprint_max = 0.0
 
         if season == 2014 and final_event_included and remaining_gps > 0:
             final_gp_max = (standard_gp_win * 2.0) + fl_potential
@@ -541,8 +565,11 @@ def calculate_max_remaining_points(
         else:
             standard_c_gp = ERA_1991_2002_POINTS[1] + ERA_1991_2002_POINTS[2]
 
-        if season >= 2022:
-            sprint_c_max = SPRINT_POINTS_2022_PRESENT[1] + SPRINT_POINTS_2022_PRESENT[2]  # 8 + 7 = 15
+        if season >= 2026:
+            # 2026 Art A2.2.2: P1=8, P2=7 -> 15 pts (P8=0 pts does not affect top 2 cars capacity)
+            sprint_c_max = SPRINT_POINTS_2026[1] + SPRINT_POINTS_2026[2]  # 8 + 7 = 15
+        elif season >= 2022:
+            sprint_c_max = SPRINT_POINTS_2022_2025[1] + SPRINT_POINTS_2022_2025[2]  # 8 + 7 = 15
         elif season == 2021:
             sprint_c_max = SPRINT_POINTS_2021[1] + SPRINT_POINTS_2021[2]  # 3 + 2 = 5
         else:
