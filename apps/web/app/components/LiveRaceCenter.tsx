@@ -11,9 +11,43 @@ import CircuitMap from "./CircuitMap";
 interface LiveSessionProps {
   sessionId?: string;
   spoilerShield?: boolean;
+  onSessionChange?: (sessionId: string) => void;
+}
+
+interface AvailableSession {
+  session_id: string;
+  session_name: string;
+  meeting_id: string;
+  season: number;
+  round_number: number;
+  circuit_name: string;
+  session_type: string;
+  status: string;
+  provider_session_key: string;
+  data_state: string;
+  is_fixture: boolean;
+}
+
+interface DiagnosticsData {
+  upstream_provider: string;
+  connection_status: string;
+  is_connected: boolean;
+  broker: string;
+  active_session_key?: string;
+  subscribed_topics: string[];
+  last_upstream_message_time?: string;
+  last_normalized_event_time?: string;
+  last_redis_update_time?: string;
+  ingestion_lag_seconds?: number;
+  total_messages_received: number;
+  total_duplicates_filtered: number;
+  has_credentials: boolean;
+  connected_clients_count: number;
+  redis_connected: boolean;
 }
 
 interface SectorTimes {
+
   sector_1?: number;
   sector_2?: number;
   sector_3?: number;
@@ -123,11 +157,15 @@ interface Snapshot {
   };
 }
 
-export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShield = false }: LiveSessionProps) {
+export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShield = false, onSessionChange }: LiveSessionProps) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [connectionState, setConnectionState] = useState<"CONNECTING" | "CONNECTED" | "DISCONNECTED" | "ERROR">("CONNECTING");
   const [selectedDriver, setSelectedDriver] = useState<number | null>(1); // Default Max Verstappen
   const [activeView, setActiveView] = useState<"TIMING" | "PIT_STINTS" | "RACE_CONTROL" | "TELEMETRY">("TIMING");
+  const [availableSessions, setAvailableSessions] = useState<AvailableSession[]>([]);
+  const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
+  const [diagnosticsData, setDiagnosticsData] = useState<DiagnosticsData | null>(null);
+  const [loadingDiag, setLoadingDiag] = useState<boolean>(false);
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -139,9 +177,35 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
     return `${minutes}:${seconds.padStart(6, "0")}`;
   };
 
+  // Load available sessions for session switcher
+  useEffect(() => {
+    fetch("http://localhost:8000/api/v1/live/sessions")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setAvailableSessions(data);
+      })
+      .catch((err) => console.error("Error loading available sessions", err));
+  }, []);
+
+  // Fetch operational diagnostics
+  const fetchDiagnostics = async () => {
+    setLoadingDiag(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/v1/live/diagnostics");
+      if (res.ok) {
+        setDiagnosticsData(await res.json());
+      }
+    } catch (err) {
+      console.error("Diagnostics fetch error", err);
+    } finally {
+      setLoadingDiag(false);
+    }
+  };
+
   useEffect(() => {
     // 1. Initial REST fetch for snapshot fallback
     fetch(`http://localhost:8000/api/v1/live/${sessionId}/snapshot`)
+
       .then((res) => res.json())
       .then((data) => {
         if (data && data.session_id) setSnapshot(data);
@@ -246,7 +310,7 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
       {/* Top Session Bar */}
       <div className="bg-[#15171E] rounded-xl border border-[#272A35] p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="flex items-center space-x-1.5 text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded bg-[#E10600] text-white">
               <Radio className="w-3 h-3 animate-pulse" />
               <span>LIVE RACE CENTER</span>
@@ -256,21 +320,44 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
               <span className={`w-2 h-2 rounded-full ${connectionState === "CONNECTED" ? "bg-[#30D158]" : "bg-red-500"}`}></span>
               <span>WS: {connectionState}</span>
             </div>
+
+            {/* Dynamic Session Switcher Dropdown */}
+            {availableSessions.length > 0 && onSessionChange && (
+              <select
+                aria-label="Active Racing Session"
+                value={sessionId}
+                onChange={(e) => onSessionChange(e.target.value)}
+                className="bg-[#0D0E12] border border-[#272A35] text-xs font-semibold text-white px-2.5 py-1 rounded focus:outline-none focus:border-[#E10600]"
+              >
+                {availableSessions.map((s) => (
+                  <option key={s.session_id} value={s.session_id}>
+                    {s.data_state === "LIVE" ? "🔴 [LIVE] " : "[HISTORICAL] "}
+                    {s.session_name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <h2 className="text-xl md:text-2xl font-black text-white">{snapshot?.session_name || "Formula 1 Grand Prix"}</h2>
-          <div className="text-xs text-[#8F96A3] flex items-center space-x-2">
+          <div className="text-xs text-[#8F96A3] flex flex-wrap items-center gap-2">
             <span>{snapshot?.circuit_name}</span>
             <span>•</span>
             <span className="font-mono text-white font-bold">LAP {snapshot?.current_lap} / {snapshot?.total_laps}</span>
             <span>•</span>
-            <span className="text-[#64D2FF]">PROVENANCE: {snapshot?.provenance?.source} ({snapshot?.data_state})</span>
+            <span className={`font-semibold px-1.5 py-0.2 rounded text-[11px] ${
+              snapshot?.data_state === "LIVE" ? "bg-red-900/40 text-red-400 border border-red-700/50" : "bg-blue-900/40 text-blue-400 border border-blue-700/50"
+            }`}>
+              FEED: {snapshot?.data_state || "HISTORICAL"}
+            </span>
+            <span>•</span>
+            <span className="text-[#64D2FF]">SRC: {snapshot?.provenance?.source}</span>
           </div>
         </div>
 
-        {/* Weather & Re-sync Controls */}
+        {/* Weather & Re-sync / Diagnostics Controls */}
         <div className="flex items-center space-x-3">
           {snapshot?.weather && (
-            <div className="flex items-center space-x-4 bg-[#0D0E12] border border-[#272A35] px-4 py-2 rounded-lg text-xs">
+            <div className="hidden sm:flex items-center space-x-4 bg-[#0D0E12] border border-[#272A35] px-4 py-2 rounded-lg text-xs">
               <div className="flex items-center space-x-1.5 text-white">
                 <CloudSun className="w-4 h-4 text-amber-400" />
                 <span className="font-mono font-bold">{snapshot.weather.track_temperature}°C</span>
@@ -288,6 +375,18 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
           )}
 
           <button
+            onClick={() => {
+              setShowDiagnostics(true);
+              fetchDiagnostics();
+            }}
+            className="flex items-center space-x-1 bg-[#1a1d26] hover:bg-[#272A35] border border-[#272A35] text-[#8F96A3] hover:text-white px-3 py-2 rounded-lg text-xs font-semibold transition"
+            title="Operational Stream Diagnostics"
+          >
+            <Gauge className="w-3.5 h-3.5" />
+            <span>DIAGNOSTICS</span>
+          </button>
+
+          <button
             onClick={triggerResync}
             className="flex items-center space-x-1 bg-[#272A35] hover:bg-[#343846] text-white px-3 py-2 rounded-lg text-xs font-semibold transition"
             title="Resynchronize stream"
@@ -297,6 +396,102 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
           </button>
         </div>
       </div>
+
+      {/* Operational Diagnostics Modal */}
+      {showDiagnostics && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#15171E] border border-[#272A35] rounded-xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#272A35] pb-3">
+              <div className="flex items-center space-x-2">
+                <Gauge className="w-5 h-5 text-[#64D2FF]" />
+                <h3 className="font-bold text-white text-base">Upstream Feed Operational Diagnostics</h3>
+              </div>
+              <button
+                onClick={() => setShowDiagnostics(false)}
+                className="text-[#8F96A3] hover:text-white text-sm font-bold px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {loadingDiag ? (
+              <div className="py-8 text-center text-sm text-[#8F96A3]">Loading operational diagnostics...</div>
+            ) : diagnosticsData ? (
+              <div className="space-y-3 text-xs font-mono">
+                <div className="grid grid-cols-2 gap-2 bg-[#0D0E12] p-3 rounded border border-[#272A35]">
+                  <div>
+                    <span className="text-[#8F96A3] block">Upstream Provider:</span>
+                    <span className="text-white font-bold">{diagnosticsData.upstream_provider}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#8F96A3] block">Connection Status:</span>
+                    <span className={`font-bold ${diagnosticsData.is_connected ? "text-[#30D158]" : "text-amber-400"}`}>
+                      {diagnosticsData.connection_status}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#8F96A3] block">Broker:</span>
+                    <span className="text-white">{diagnosticsData.broker}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#8F96A3] block">Active Provider Key:</span>
+                    <span className="text-white">{diagnosticsData.active_session_key || "None (Idle)"}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 bg-[#0D0E12] p-3 rounded border border-[#272A35]">
+                  <div>
+                    <span className="text-[#8F96A3] block">Ingestion Lag:</span>
+                    <span className="text-white">{diagnosticsData.ingestion_lag_seconds !== null ? `${diagnosticsData.ingestion_lag_seconds}s` : "N/A"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#8F96A3] block">WebSocket Clients:</span>
+                    <span className="text-white">{diagnosticsData.connected_clients_count} connected</span>
+                  </div>
+                  <div>
+                    <span className="text-[#8F96A3] block">Messages Received:</span>
+                    <span className="text-white">{diagnosticsData.total_messages_received}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#8F96A3] block">Duplicates Filtered:</span>
+                    <span className="text-white">{diagnosticsData.total_duplicates_filtered}</span>
+                  </div>
+                </div>
+
+                <div className="bg-[#0D0E12] p-3 rounded border border-[#272A35] space-y-1">
+                  <div>
+                    <span className="text-[#8F96A3]">Subscribed Topics: </span>
+                    <span className="text-white">{diagnosticsData.subscribed_topics.join(", ") || "None"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#8F96A3]">OAuth2 Credentials Present: </span>
+                    <span className={diagnosticsData.has_credentials ? "text-[#30D158]" : "text-amber-400"}>
+                      {diagnosticsData.has_credentials ? "YES" : "NO (Unauthenticated mode)"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#8F96A3]">Redis Cache Connected: </span>
+                    <span className={diagnosticsData.redis_connected ? "text-[#30D158]" : "text-red-400"}>
+                      {diagnosticsData.redis_connected ? "YES" : "NO"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-red-400 text-sm">Failed to load diagnostics.</div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowDiagnostics(false)}
+                className="bg-[#272A35] hover:bg-[#343846] text-white px-4 py-2 rounded text-xs font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Split Layout: Timing Tower (Left 60%) + Circuit Map & Telemetry (Right 40%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

@@ -58,11 +58,13 @@ interface Meeting {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"home" | "live" | "championship" | "calendar">("live");
+  const [selectedLiveSession, setSelectedLiveSession] = useState<string>("2024_01_race");
   const [spoilerShield, setSpoilerShield] = useState(false);
   const [standings, setStandings] = useState<DriverStanding[]>([]);
   const [champIntel, setChampIntel] = useState<ChampionshipIntelligence | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
+
 
   useEffect(() => {
     async function loadData() {
@@ -191,7 +193,11 @@ export default function Home() {
 
         {/* Tab: Live Race Center */}
         {activeTab === "live" && (
-          <LiveRaceCenter sessionId="2024_01_race" spoilerShield={spoilerShield} />
+          <LiveRaceCenter
+            sessionId={selectedLiveSession}
+            spoilerShield={spoilerShield}
+            onSessionChange={(sId) => setSelectedLiveSession(sId)}
+          />
         )}
 
         {/* Tab 1: Dashboard */}

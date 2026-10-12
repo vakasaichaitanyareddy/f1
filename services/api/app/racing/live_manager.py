@@ -53,7 +53,29 @@ class LiveSessionManager:
         self._snapshots: Dict[str, LiveSessionSnapshot] = {}
         self._fixture_sessions: Dict[str, Dict[str, Any]] = {}
         self._subscriber_queues: Dict[str, List[asyncio.Queue]] = defaultdict(list)
+        # Mapping from internal session ID to OpenF1 upstream session key
+        self._session_provider_map: Dict[str, str] = {
+            "2024_01_race": "9472",
+            "2024_01_fp1": "9462",
+            "2024_01_fp2": "9463",
+            "2024_01_fp3": "9464",
+            "2024_01_qualifying": "9468",
+        }
         self._lock = asyncio.Lock()
+
+    def map_session_to_provider(self, session_id: str, provider_key: str):
+        """Explicitly maps an internal session ID to an upstream provider session key."""
+        self._session_provider_map[session_id] = str(provider_key)
+
+    def resolve_provider_session_key(self, session_id: str) -> str:
+        """Resolves the upstream provider session key for an internal session ID."""
+        return self._session_provider_map.get(session_id, session_id)
+
+    def get_connected_clients_count(self, session_id: Optional[str] = None) -> int:
+        """Returns the number of connected APEX GP WebSocket clients."""
+        if session_id:
+            return len(self._subscriber_queues.get(session_id, []))
+        return sum(len(q_list) for q_list in self._subscriber_queues.values())
 
     def register_fixture_session(self, session_id: str, fixture_data: Dict[str, Any]):
         """Registers a deterministic test fixture session with explicit test labelling."""
@@ -238,9 +260,10 @@ class LiveSessionManager:
 
         data_state = DataStateEnum.LIVE if is_live_stream else DataStateEnum.HISTORICAL
         if not drivers_raw and not positions_raw:
-            data_state = DataStateEnum.UNAVAILABLE
+            return None
 
         # Build driver lookup table
+
         drivers_by_num: Dict[int, Dict[str, Any]] = {}
         for d in drivers_raw:
             num = d.get("driver_number")

@@ -1,22 +1,64 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import httpx
 from typing import List, Dict, Any, Optional
 from app.racing.models import DataStateEnum
 from app.racing.schemas import ProvenanceMeta
+
+from app.core.config import settings
 
 class OpenF1Provider:
     """
     Adapter for OpenF1 timing and session feeds.
     Provides verified provenance, timestamping, deduplication, error isolation,
     and stale-data detection.
+    Supports OAuth2 access token acquisition and caching for authenticated streaming & REST.
     """
-    BASE_URL = "https://api.openf1.org/v1"
+    BASE_URL = settings.OPENF1_BASE_URL
+    TOKEN_URL = settings.OPENF1_TOKEN_URL
     STALE_THRESHOLD_SECONDS = 30.0
 
     def __init__(self, timeout_seconds: float = 6.0, client: Optional[httpx.AsyncClient] = None):
         self.timeout = timeout_seconds
         self._client = client
         self._last_successful_timestamp: Optional[datetime] = None
+        self._cached_token: Optional[str] = None
+        self._token_expiry: Optional[datetime] = None
+
+    async def get_access_token(self) -> Optional[str]:
+        """
+        Retrieves or refreshes OAuth2 Bearer token from OpenF1 server-side.
+        Returns None if credentials are not configured or request fails.
+        """
+        # Return cached token if valid (with 5-minute safety buffer)
+        now = datetime.now(timezone.utc)
+        if self._cached_token and self._token_expiry and (self._token_expiry - now).total_seconds() > 300:
+            return self._cached_token
+
+        username = settings.OPENF1_USERNAME
+        password = settings.OPENF1_PASSWORD
+        if not username or not password:
+            return None
+
+        try:
+            payload = {"username": username, "password": password}
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
+            if self._client:
+                res = await self._client.post(self.TOKEN_URL, data=payload, headers=headers, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.post(self.TOKEN_URL, data=payload, headers=headers)
+
+            if res.status_code == 200:
+                data = res.json()
+                token = data.get("access_token")
+                expires_in = int(data.get("expires_in", 3600))
+                if token:
+                    self._cached_token = token
+                    self._token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                    return token
+        except Exception:
+            pass
+        return None
 
     def _create_provenance(
         self,

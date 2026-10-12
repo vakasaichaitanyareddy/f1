@@ -27,6 +27,7 @@ interface LiveSnapshot {
   total_laps: number;
   current_lap: number;
   track_status: string;
+  data_state?: string;
   timing_tower: DriverTiming[];
   weather?: {
     air_temperature: number;
@@ -39,10 +40,21 @@ interface LiveSnapshot {
   };
 }
 
+
+interface AvailableSession {
+  session_id: string;
+  session_name: string;
+  data_state: string;
+  circuit_name: string;
+}
+
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'LIVE' | 'STANDINGS'>('LIVE');
   const [standings, setStandings] = useState<any[]>([]);
   const [liveData, setLiveData] = useState<LiveSnapshot | null>(null);
+  const [availableSessions, setAvailableSessions] = useState<AvailableSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('2024_01_race');
   const [spoilerShield, setSpoilerShield] = useState(false);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -55,14 +67,25 @@ export default function App() {
   };
 
   useEffect(() => {
-    // 1. Fetch standings
+    // 1. Fetch available sessions
+    fetch('http://localhost:8000/api/v1/live/sessions')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setAvailableSessions(data);
+      })
+      .catch(() => {});
+
+    // 2. Fetch standings
     fetch('http://localhost:8000/api/v1/standings/drivers')
       .then(res => res.json())
       .then(data => setStandings(data))
       .catch(() => {});
+  }, []);
 
-    // 2. Fetch live snapshot REST fallback
-    fetch('http://localhost:8000/api/v1/live/2024_01_race/snapshot')
+  useEffect(() => {
+    // Fetch live snapshot REST fallback for selected session
+    setLoading(true);
+    fetch(`http://localhost:8000/api/v1/live/${selectedSessionId}/snapshot`)
       .then(res => res.json())
       .then(data => {
         if (data && data.session_id) {
@@ -72,10 +95,10 @@ export default function App() {
       })
       .catch(() => setLoading(false));
 
-    // 3. Connect to WebSocket
+    // Connect to WebSocket for selected session
     let ws: WebSocket;
     try {
-      ws = new WebSocket('ws://localhost:8000/ws/live/2024_01_race');
+      ws = new WebSocket(`ws://localhost:8000/ws/live/${selectedSessionId}`);
       ws.onopen = () => setConnected(true);
       ws.onmessage = (event) => {
         try {
@@ -87,7 +110,8 @@ export default function App() {
               ...prev,
               current_lap: msg.payload.current_lap ?? prev.current_lap,
               track_status: msg.payload.track_status ?? prev.track_status,
-              timing_tower: msg.payload.timing_tower ?? prev.timing_tower
+              timing_tower: msg.payload.timing_tower ?? prev.timing_tower,
+              data_state: msg.data_state ?? prev.data_state
             } : prev);
           }
         } catch (_) {}
@@ -99,7 +123,7 @@ export default function App() {
     return () => {
       if (ws) ws.close();
     };
-  }, []);
+  }, [selectedSessionId]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -120,6 +144,29 @@ export default function App() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Dynamic Session Switcher Bar (Mobile) */}
+      {availableSessions.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sessionPickerScroll}>
+          {availableSessions.map((s) => (
+            <TouchableOpacity
+              key={s.session_id}
+              style={[
+                styles.sessionPill,
+                selectedSessionId === s.session_id && styles.sessionPillActive
+              ]}
+              onPress={() => setSelectedSessionId(s.session_id)}
+            >
+              <Text style={[
+                styles.sessionPillText,
+                selectedSessionId === s.session_id && styles.sessionPillTextActive
+              ]}>
+                {s.data_state === "LIVE" ? "🔴 " : ""}{s.session_name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Tabs */}
       <View style={styles.tabBar}>
@@ -152,7 +199,7 @@ export default function App() {
               </View>
               <Text style={styles.sessionTitle}>{liveData?.session_name || "Bahrain Grand Prix"}</Text>
               <Text style={styles.sessionMeta}>
-                {liveData?.circuit_name} • {liveData?.weather?.track_temperature}°C TRACK
+                {liveData?.circuit_name} • {liveData?.weather?.track_temperature}°C TRACK • FEED: {liveData?.provenance?.data_state || "HISTORICAL"}
               </Text>
               <Text style={styles.provenanceNote}>
                 PROVENANCE: {liveData?.provenance?.source} ({liveData?.provenance?.data_state})
@@ -161,6 +208,7 @@ export default function App() {
 
             {/* Timing Tower */}
             <Text style={styles.sectionTitle}>TIMING TOWER</Text>
+
             {liveData?.timing_tower?.map((t) => (
               <View key={t.driver_number} style={styles.timingRow}>
                 <Text style={styles.positionText}>{spoilerShield ? "•" : `P${t.position}`}</Text>
@@ -409,4 +457,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'monospace',
   },
+  sessionPickerScroll: {
+    backgroundColor: '#15171E',
+    borderBottomWidth: 1,
+    borderBottomColor: '#272A35',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  sessionPill: {
+    backgroundColor: '#0D0E12',
+    borderColor: '#272A35',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 8,
+  },
+  sessionPillActive: {
+    backgroundColor: '#E10600',
+    borderColor: '#E10600',
+  },
+  sessionPillText: {
+    color: '#8F96A3',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  sessionPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
 });
+

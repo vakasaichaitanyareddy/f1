@@ -368,6 +368,79 @@ async def get_championship_intelligence(
 
 # ----------------- LIVE RACE CENTER REST ENDPOINTS -----------------
 
+@api_router.get("/live/diagnostics")
+async def get_live_diagnostics():
+    """
+    Returns operational diagnostics for upstream OpenF1 streaming,
+    including connection status, active session key, subscribed topics,
+    deduplication metrics, ingestion lag, Redis cache status, and connected clients.
+    Excludes sensitive credentials.
+    """
+    from app.providers.openf1_stream import openf1_stream_manager
+    from app.core.redis import redis_client
+
+    diag = openf1_stream_manager.get_diagnostics()
+    diag["connected_clients_count"] = live_session_manager.get_connected_clients_count()
+    diag["redis_connected"] = bool(redis_client._redis is not None)
+    return diag
+
+@api_router.get("/live/sessions")
+async def list_available_live_sessions(db: AsyncSession = Depends(get_db_session)):
+    """
+    Returns available sessions for Live Race Center selection,
+    including format, round number, provider mapping, and data state (LIVE vs HISTORICAL).
+    """
+    from app.providers.openf1_stream import openf1_stream_manager
+
+    # Fetch sessions from DB
+    sessions_list = []
+    try:
+        stmt = (
+            select(SessionModel, MeetingModel)
+            .join(MeetingModel, SessionModel.meeting_id == MeetingModel.id)
+            .order_by(MeetingModel.season.desc(), MeetingModel.round_number.desc())
+        )
+        res = await db.execute(stmt)
+        active_provider_key = openf1_stream_manager.active_session_key
+
+        for s, m in res.all():
+            provider_key = live_session_manager.resolve_provider_session_key(s.id)
+            is_active_live = bool(openf1_stream_manager.is_connected and active_provider_key == provider_key)
+            sessions_list.append({
+                "session_id": s.id,
+                "session_name": f"{m.official_name} - {s.name}",
+                "meeting_id": m.id,
+                "season": m.season,
+                "round_number": m.round_number,
+                "circuit_name": m.circuit_name,
+                "session_type": s.type.value if hasattr(s.type, "value") else str(s.type),
+                "status": "LIVE" if is_active_live else (s.status.value if hasattr(s.status, "value") else str(s.status)),
+                "provider_session_key": provider_key,
+                "data_state": "LIVE" if is_active_live else "HISTORICAL",
+                "is_fixture": False
+            })
+    except Exception:
+        pass
+
+
+    # Add fixture session if not already in DB
+    if not any(s["session_id"] == "2024_01_race" for s in sessions_list):
+        sessions_list.insert(0, {
+            "session_id": "2024_01_race",
+            "session_name": "Bahrain GP 2024 (Baseline Demo Race)",
+            "meeting_id": "2024_01_bahrain",
+            "season": 2024,
+            "round_number": 1,
+            "circuit_name": "Bahrain International Circuit",
+            "session_type": "RACE",
+            "status": "COMPLETED",
+            "provider_session_key": "9472",
+            "data_state": "HISTORICAL",
+            "is_fixture": True
+        })
+
+    return sessions_list
+
 @api_router.get("/live/{session_id}/snapshot", response_model=LiveSessionSnapshot)
 async def get_live_snapshot(session_id: str):
     """
@@ -376,14 +449,19 @@ async def get_live_snapshot(session_id: str):
     """
     snapshot = await live_session_manager.get_current_snapshot(session_id)
     if not snapshot:
+        provider_key = live_session_manager.resolve_provider_session_key(session_id)
+        snapshot = await live_session_manager.ingest_session_data(session_id, provider_key, is_live_stream=False)
+    if not snapshot:
         raise HTTPException(status_code=404, detail=f"Live session {session_id} not active or available.")
     return snapshot
 
 @api_router.post("/live/{session_id}/sync")
-async def trigger_live_sync(session_id: str, openf1_key: str = "9472", is_live: bool = False):
+async def trigger_live_sync(session_id: str, openf1_key: Optional[str] = None, is_live: bool = False):
     """
     Synchronizes session data directly from OpenF1 provider,
     building a fresh snapshot and broadcasting incremental updates.
     """
-    snapshot = await live_session_manager.ingest_session_data(session_id, openf1_key, is_live_stream=is_live)
+    provider_key = openf1_key or live_session_manager.resolve_provider_session_key(session_id)
+    snapshot = await live_session_manager.ingest_session_data(session_id, provider_key, is_live_stream=is_live)
     return {"status": "synced", "session_id": session_id, "data_state": snapshot.data_state, "sequence_number": snapshot.sequence_number}
+

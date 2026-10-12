@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     
     # Provider Settings
     OPENF1_BASE_URL: str = "https://api.openf1.org/v1"
+    OPENF1_TOKEN_URL: str = "https://api.openf1.org/token"
+    OPENF1_USERNAME: Optional[str] = None
+    OPENF1_PASSWORD: Optional[str] = None
+    OPENF1_MQTT_BROKER: str = "mqtt.openf1.org"
+    OPENF1_MQTT_PORT: int = 8883
     JOLPICA_BASE_URL: str = "https://api.jolpi.ca/ergast/f1"
 
     model_config = ConfigDict(env_file=".env", extra="ignore")

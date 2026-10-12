@@ -62,11 +62,15 @@
 
 ---
 
-### Module D: Live Race Center (Release 2)
+### Module D: Live Race Center (Release 2 & Release 2.1)
 | Feature ID | Name / Description | Release Target | Status | Dependencies | Verification Evidence & Criteria |
 |---|---|---|---|---|---|
 | D1-01 | OpenF1 & FastF1 backend data adapter with quota & retry handling | R2 | [DONE] | J1-01 | OpenF1Provider adapter implemented with endpoints for drivers, positions, laps, pit stops, stints, weather, race control, location, and telemetry |
 | D1-02 | Data freshness status indicator (LIVE, DELAYED, STALE, HISTORICAL, UNAVAILABLE) | R2 | [DONE] | D1-01 | Explicit provenance tagging with 30-second stale detection threshold |
+| D1-03 | Upstream MQTT/WebSocket live streaming adapter with token refresh (`openf1_stream.py`) | R2.1 | [DONE] | D1-01 | OpenF1StreamManager connects to `mqtt.openf1.org:8883` over TLS using OAuth2 token authentication from `https://api.openf1.org/token` |
+| D1-04 | Message deduplication and multi-session event filtering | R2.1 | [DONE] | D1-03 | Sliding window deduplication cache tested in `test_openf1_stream_manager_deduplication_and_filtering` |
+| D1-05 | Operational Stream Diagnostics endpoint & UI inspector (`/api/v1/live/diagnostics`) | R2.1 | [DONE] | D1-03 | Operational metrics (broker, connection status, topics, client count, lag, deduplication count) verified via REST endpoint and UI modal |
+| D1-06 | Dynamic Session Selector & Upstream Session Key Mapping (`/api/v1/live/sessions`) | R2.1 | [DONE] | D1-01 | Internal ID to provider key resolution (`2024_01_race` -> `9472`) and dynamic selector implemented in Web and Mobile apps |
 | D2-01 | Live Timing Tower (Position, Interval, Gap to Leader, Lap, S1/S2/S3, Best Lap) | R2 | [DONE] | D1-01 | Web & mobile timing towers with gaps, intervals, lap times, sector splits, and position deltas |
 | D2-02 | Tire compound indicator and stint age tracker | R2 | [DONE] | D2-01 | Tire compound badges (Soft, Medium, Hard, Intermediate, Wet) with stint age counter |
 | D3-01 | Live Race Control messages feed (Flags, VSC, SC, Red Flag, Penalties, Investigations) | R2 | [DONE] | D1-01 | Dedicated Race Control timeline feed with official flag badges and track status tracking |
