@@ -769,9 +769,16 @@ def calculate_driver_scenario_to_win(
 ) -> Dict[str, Any]:
     """
     Pure mathematical scenario analysis: "What does this driver need to win?"
-    Computes exact point thresholds, rival point allowances, clinching round,
+    Computes exact point thresholds, rival point allowances, clinching status,
     FIA countback tie-break implications, and finishing requirement matrix.
     Mathematically bounded and deterministic; no exponential simulations.
+
+    Semantics of returned thresholds:
+    - min_points_needed_if_rival_zero: Exact additional points needed to surpass rival if rival scores 0 pts.
+    - min_points_to_clinch: Conservative theoretical points threshold vs selected rival (comparing target final
+      points against rival's independent theoretical maximum capacity). Beating one selected rival does not
+      necessarily clinch the entire world championship against other contenders.
+    - max_rival_points_allowed: Theoretical points cap the rival can achieve before target is locked out.
     """
     point_gap = rival_points - target_points  # Positive if rival is ahead, negative if target is ahead
     max_target_capacity = calculate_max_remaining_points(

@@ -453,7 +453,7 @@ async def get_championship_scenario_calculator(
             "data_state": "HISTORICAL",
             "verified": True,
             "is_test_fixture": True,
-            "notes": "Scenario evaluation executed via pure mathematical bounds."
+            "notes": "Evaluates conservative theoretical points threshold vs selected rival (comparing against rival's maximum independent score), exact zero-point threshold, and countback boundaries."
         }
     }
 

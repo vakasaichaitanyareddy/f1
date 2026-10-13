@@ -301,7 +301,7 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="border-r border-[#272A35]/60 pr-4">
                 <span className="text-xs text-[#8F96A3] block uppercase">
-                  {calc.point_gap < 0 ? "Min Pts to Clinch Title" : "Min Pts Needed (Rival = 0)"}
+                  {calc.point_gap < 0 ? "Conservative Points Threshold vs Selected Rival" : "Min Pts Needed (Rival = 0)"}
                 </span>
                 <span className="text-2xl font-mono font-bold text-[#64D2FF] mt-1 block">
                   {calc.point_gap < 0 && calc.min_points_to_clinch !== undefined && calc.min_points_to_clinch !== null
@@ -310,7 +310,7 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
                 </span>
                 <span className="text-xs text-[#8F96A3] mt-1 block">
                   {calc.point_gap < 0
-                    ? `Points required to mathematically clinch over ${calc.rival_driver} irrespective of rival finishes.`
+                    ? `Conservative bound against ${calc.rival_driver}'s theoretical maximum score. May exceed an exact result-based minimum; does not guarantee clinching against other contenders.`
                     : `Points required to surpass ${calc.rival_driver} if rival scores zero.`}
                 </span>
               </div>
@@ -321,7 +321,7 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
                   {calc.max_rival_points_allowed} pts
                 </span>
                 <span className="text-xs text-[#8F96A3] mt-1 block">
-                  Max points {calc.rival_driver} can score before {calc.target_driver} is mathematically locked out.
+                  Theoretical score bound: max points {calc.rival_driver} can score before {calc.target_driver} is locked out (assuming target scores maximum remaining points).
                 </span>
               </div>
 

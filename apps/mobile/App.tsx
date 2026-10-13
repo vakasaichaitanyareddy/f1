@@ -722,7 +722,7 @@ export default function App() {
                     </Text>
                   </View>
                   <View style={styles.metricBox}>
-                    <Text style={styles.metricLabel}>{calc.point_gap < 0 ? "PTS TO CLINCH" : "MIN PTS NEEDED"}</Text>
+                    <Text style={styles.metricLabel}>{calc.point_gap < 0 ? "THRESHOLD VS RIVAL" : "MIN PTS NEEDED"}</Text>
                     <Text style={styles.metricValueHighlight}>
                       {calc.point_gap < 0 && calc.min_points_to_clinch != null
                         ? calc.min_points_to_clinch
@@ -730,7 +730,7 @@ export default function App() {
                     </Text>
                   </View>
                   <View style={styles.metricBox}>
-                    <Text style={styles.metricLabel}>RIVAL CAP</Text>
+                    <Text style={styles.metricLabel}>RIVAL CAP (BOUND)</Text>
                     <Text style={styles.metricValueWarn}>
                       ≤ {calc.max_rival_points_allowed}
                     </Text>
