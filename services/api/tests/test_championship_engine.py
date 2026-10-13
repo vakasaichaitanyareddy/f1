@@ -636,7 +636,7 @@ def test_scenario_calculator_mathematical_bounds():
     assert res_elim["min_points_needed_if_rival_zero"] is None
     assert res_elim["max_rival_points_allowed"] == 0.0
 
-    # 3. Target driver already clinched (leading by 60 with 2 GPs remaining -> max rival capacity = 52)
+    # 3. Target driver already clinched (leading by 70 with 2 GPs remaining -> max rival capacity = 52)
     res_clinch = calculate_driver_scenario_to_win(
         target_driver_code="VER",
         target_points=200.0,
@@ -648,6 +648,72 @@ def test_scenario_calculator_mathematical_bounds():
     )
     assert res_clinch["clinched_now"] is True
     assert res_clinch["point_gap"] == -70.0
+    assert res_clinch["min_points_needed_if_rival_zero"] == 0.0
+    assert res_clinch["min_points_to_clinch"] == 0.0
+
+    # 4. Target driver ahead of rival but not yet clinched (2024: leading by 8 pts with 23 GPs & 6 sprints remaining)
+    # Target (VER: 26) vs Rival (PER: 18), capacity = 23*26 + 6*8 = 646. Lead = 8.
+    res_ahead = calculate_driver_scenario_to_win(
+        target_driver_code="VER",
+        target_points=26.0,
+        rival_driver_code="PER",
+        rival_points=18.0,
+        remaining_gps=23,
+        remaining_sprints=6,
+        season=2024
+    )
+    assert res_ahead["is_eliminated"] is False
+    assert res_ahead["clinched_now"] is False
+    assert res_ahead["point_gap"] == -8.0
+    # Rival scores 0 -> Target already ahead by 8, needs 0 additional points to beat rival
+    assert res_ahead["min_points_needed_if_rival_zero"] == 0.0
+    # To guarantee clinching against rival's maximum 646 capacity: 646 - 8 + 1 = 639.0 points
+    assert res_ahead["min_points_to_clinch"] == 639.0
+    assert res_ahead["max_rival_points_allowed"] == 646.0
+
+    # 5. Exactly tied with rival (gap = 0)
+    res_tied_no_tb = calculate_driver_scenario_to_win(
+        target_driver_code="LEC",
+        target_points=100.0,
+        rival_driver_code="NOR",
+        rival_points=100.0,
+        remaining_gps=1,
+        remaining_sprints=0,
+        season=2024
+    )
+    assert res_tied_no_tb["point_gap"] == 0.0
+    assert res_tied_no_tb["min_points_needed_if_rival_zero"] == 1.0
+    assert res_tied_no_tb["min_points_to_clinch"] == 27.0  # 26 max capacity + 1.0
+
+    # 6. Exactly tied with rival with countback tie advantage
+    res_tied_tb = calculate_driver_scenario_to_win(
+        target_driver_code="LEC",
+        target_points=100.0,
+        rival_driver_code="NOR",
+        rival_points=100.0,
+        remaining_gps=1,
+        remaining_sprints=0,
+        target_finishes=[1, 1],
+        rival_finishes=[2, 2],
+        season=2024
+    )
+    assert res_tied_tb["countback_tie_advantage"] is True
+    assert res_tied_tb["min_points_needed_if_rival_zero"] == 0.0
+
+    # 7. Zero remaining events (season over)
+    res_zero_remaining_ahead = calculate_driver_scenario_to_win(
+        target_driver_code="VER",
+        target_points=400.0,
+        rival_driver_code="NOR",
+        rival_points=380.0,
+        remaining_gps=0,
+        remaining_sprints=0,
+        season=2024
+    )
+    assert res_zero_remaining_ahead["clinched_now"] is True
+    assert res_zero_remaining_ahead["min_points_needed_if_rival_zero"] == 0.0
+    assert res_zero_remaining_ahead["min_points_to_clinch"] == 0.0
+    assert res_zero_remaining_ahead["max_rival_points_allowed"] == 0.0
 
 def test_championship_monte_carlo_simulator():
     from app.championship.simulator import ChampionshipMonteCarloSimulator
@@ -680,6 +746,53 @@ def test_championship_monte_carlo_simulator():
     # Sum of probabilities across all drivers should equal approximately 100%
     total_pct = sum(p["championship_probability_pct"] for p in res["probabilities"])
     assert 99.0 <= total_pct <= 101.0
+    assert "model_assumptions" in res
+    assert res["model_assumptions"]["baseline_dnf_rate_pct"] == 7.5
+
+
+def test_championship_simulator_historical_scoring_eras():
+    """
+    Verifies that the Monte Carlo simulator applies the exact historical scoring
+    rules corresponding to the simulated season (2003-2009 P1=10, 1991-2002 P1=10/P2=6,
+    2021 sprint 3-2-1, 2026 sprint 8-1).
+    """
+    from app.championship.simulator import ChampionshipMonteCarloSimulator
+
+    # 1. 2005 Season (10-8-6-5-4-3-2-1, no sprints)
+    sim_2005 = ChampionshipMonteCarloSimulator(
+        standings=[{"driver_code": "ALO", "points": 50.0}, {"driver_code": "RAI", "points": 40.0}],
+        season=2005
+    )
+    assert sim_2005._get_points_for_position(1, is_sprint=False) == 10.0
+    assert sim_2005._get_points_for_position(2, is_sprint=False) == 8.0
+    assert sim_2005._get_points_for_position(9, is_sprint=False) == 0.0
+
+    # 2. 1998 Season (10-6-4-3-2-1, no sprints)
+    sim_1998 = ChampionshipMonteCarloSimulator(
+        standings=[{"driver_code": "HAK", "points": 30.0}, {"driver_code": "MSC", "points": 24.0}],
+        season=1998
+    )
+    assert sim_1998._get_points_for_position(1, is_sprint=False) == 10.0
+    assert sim_1998._get_points_for_position(2, is_sprint=False) == 6.0
+    assert sim_1998._get_points_for_position(7, is_sprint=False) == 0.0
+
+    # 3. 2021 Sprint Scale (3-2-1)
+    sim_2021 = ChampionshipMonteCarloSimulator(
+        standings=[{"driver_code": "VER", "points": 200.0}, {"driver_code": "HAM", "points": 195.0}],
+        season=2021
+    )
+    assert sim_2021._get_points_for_position(1, is_sprint=True) == 3.0
+    assert sim_2021._get_points_for_position(2, is_sprint=True) == 2.0
+    assert sim_2021._get_points_for_position(3, is_sprint=True) == 1.0
+    assert sim_2021._get_points_for_position(4, is_sprint=True) == 0.0
+
+    # 4. Modern 2024 Season (25-18-15... and sprint 8-7-6...)
+    sim_2024 = ChampionshipMonteCarloSimulator(
+        standings=[{"driver_code": "VER", "points": 100.0}],
+        season=2024
+    )
+    assert sim_2024._get_points_for_position(1, is_sprint=False) == 25.0
+    assert sim_2024._get_points_for_position(1, is_sprint=True) == 8.0
 
 
 

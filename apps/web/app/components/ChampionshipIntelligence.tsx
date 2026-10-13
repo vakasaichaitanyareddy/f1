@@ -48,6 +48,7 @@ interface ScenarioData {
     is_eliminated: boolean;
     clinched_now: boolean;
     min_points_needed_if_rival_zero: number | null;
+    min_points_to_clinch?: number | null;
     max_rival_points_allowed: number;
     countback_tie_advantage: boolean;
     scenarios: Array<{
@@ -121,10 +122,15 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      const urlDriver = params.get("driver");
-      const urlRival = params.get("rival");
-      if (urlDriver) setSelectedDriver(urlDriver.toUpperCase());
-      if (urlRival) setSelectedRival(urlRival.toUpperCase());
+      const urlDriver = params.get("driver")?.trim().toUpperCase();
+      const urlRival = params.get("rival")?.trim().toUpperCase();
+      // Validate sanitized 2-4 char alphanumeric driver codes
+      if (urlDriver && /^[A-Z0-9]{2,4}$/.test(urlDriver)) {
+        setSelectedDriver(urlDriver);
+      }
+      if (urlRival && /^[A-Z0-9]{2,4}$/.test(urlRival)) {
+        setSelectedRival(urlRival);
+      }
     }
   }, []);
 
@@ -294,12 +300,18 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
           <div className="bg-[#0D0E12] rounded-xl border border-[#272A35] p-5 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="border-r border-[#272A35]/60 pr-4">
-                <span className="text-xs text-[#8F96A3] block uppercase">Min Points Needed (Rival = 0 pts)</span>
+                <span className="text-xs text-[#8F96A3] block uppercase">
+                  {calc.point_gap < 0 ? "Min Pts to Clinch Title" : "Min Pts Needed (Rival = 0)"}
+                </span>
                 <span className="text-2xl font-mono font-bold text-[#64D2FF] mt-1 block">
-                  {calc.min_points_needed_if_rival_zero !== null ? calc.min_points_needed_if_rival_zero : "N/A"}
+                  {calc.point_gap < 0 && calc.min_points_to_clinch !== undefined && calc.min_points_to_clinch !== null
+                    ? `${calc.min_points_to_clinch} pts`
+                    : (calc.min_points_needed_if_rival_zero !== null ? `${calc.min_points_needed_if_rival_zero} pts` : "N/A")}
                 </span>
                 <span className="text-xs text-[#8F96A3] mt-1 block">
-                  Points required to surpass {calc.rival_driver} if they score zero.
+                  {calc.point_gap < 0
+                    ? `Points required to mathematically clinch over ${calc.rival_driver} irrespective of rival finishes.`
+                    : `Points required to surpass ${calc.rival_driver} if rival scores zero.`}
                 </span>
               </div>
 
@@ -418,6 +430,19 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Provenance & Forecast Transparency Note */}
+            <div className="mt-3 pt-3 border-t border-[#272A35]/60 flex flex-col sm:flex-row items-start sm:items-center justify-between text-[11px] text-[#8F96A3] gap-2">
+              <div className="flex items-center space-x-1.5">
+                <Info className="w-3.5 h-3.5 text-[#64D2FF]" />
+                <span>
+                  <strong>Stochastic Forecast Notice:</strong> Simulated distributions are probabilistic model forecasts based on current season standings, calibrated pace weights, and 7.5% baseline DNF rate. Not guaranteed or verified race outcomes.
+                </span>
+              </div>
+              <span className="font-mono text-[#64D2FF] shrink-0">
+                PROVENANCE: {simulationData?.provenance?.source || "APEX_GP_MONTE_CARLO_SIMULATOR"}
+              </span>
             </div>
           </div>
         )}

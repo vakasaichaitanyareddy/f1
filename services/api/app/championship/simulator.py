@@ -13,8 +13,11 @@ from app.championship.engine import (
     calculate_driver_scenario_to_win,
     calculate_max_remaining_points,
     MODERN_GP_POINTS,
+    ERA_2003_2009_POINTS,
+    ERA_1991_2002_POINTS,
     SPRINT_POINTS_2022_2025,
     SPRINT_POINTS_2026,
+    SPRINT_POINTS_2021,
     evaluate_fia_countback
 )
 
@@ -47,10 +50,23 @@ class ChampionshipMonteCarloSimulator:
         if pos < 1:
             return 0.0
         if is_sprint:
-            scale = SPRINT_POINTS_2026 if self.season >= 2026 else SPRINT_POINTS_2022_2025
+            if self.season >= 2026:
+                scale = SPRINT_POINTS_2026
+            elif self.season >= 2022:
+                scale = SPRINT_POINTS_2022_2025
+            elif self.season == 2021:
+                scale = SPRINT_POINTS_2021
+            else:
+                scale = {}
             return scale.get(pos, 0.0)
         else:
-            return MODERN_GP_POINTS.get(pos, 0.0)
+            if self.season >= 2010:
+                scale = MODERN_GP_POINTS
+            elif self.season >= 2003:
+                scale = ERA_2003_2009_POINTS
+            else:
+                scale = ERA_1991_2002_POINTS
+            return scale.get(pos, 0.0)
 
     def run_simulation(self, iterations: int = 10000) -> Dict[str, Any]:
         """
@@ -143,6 +159,12 @@ class ChampionshipMonteCarloSimulator:
             "remaining_gps": self.remaining_gps,
             "remaining_sprints": self.remaining_sprints,
             "calibration_model": "PACE_WEIGHTED_STOCHASTIC_GAUSSIAN",
+            "model_assumptions": {
+                "baseline_dnf_rate_pct": 7.5,
+                "pace_variance_distribution": "Gaussian (mu=0, sigma=0.25 * base_weight)",
+                "weight_formula": "max(1.0, current_points + 5.0 + (wins * 15.0))",
+                "leakage_prevention": "Strict cutoff: weights calibrated only from current standings provided at forecast point."
+            },
             "probabilities": results
         }
 
