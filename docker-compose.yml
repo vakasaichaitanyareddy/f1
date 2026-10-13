@@ -1,0 +1,47 @@
+services:
+  api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://apex_user:apex_password@postgres:5432/apex_gp
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=apex-gp-dev-secret-key-32-chars-minimum-here
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/api:/app
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: apex_user
+      POSTGRES_PASSWORD: apex_password
+      POSTGRES_DB: apex_gp
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apex_user -d apex_gp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
