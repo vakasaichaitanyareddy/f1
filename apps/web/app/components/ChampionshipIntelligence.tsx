@@ -311,7 +311,9 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
                 <span className="text-xs text-[#8F96A3] mt-1 block">
                   {calc.point_gap < 0
                     ? `Conservative bound against ${calc.rival_driver}'s theoretical maximum score. May exceed an exact result-based minimum; does not guarantee clinching against other contenders.`
-                    : `Points required to surpass ${calc.rival_driver} if rival scores zero.`}
+                    : (calc.countback_tie_advantage
+                        ? `Points required to tie ${calc.rival_driver} and win under applicable tie-break rules if rival scores zero.`
+                        : `Points required to strictly surpass ${calc.rival_driver} on points if rival scores zero.`)}
                 </span>
               </div>
 
@@ -321,7 +323,7 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
                   {calc.max_rival_points_allowed} pts
                 </span>
                 <span className="text-xs text-[#8F96A3] mt-1 block">
-                  Theoretical score bound: max points {calc.rival_driver} can score before {calc.target_driver} is locked out (assuming target scores maximum remaining points).
+                  Theoretical score bound (clamped to remaining capacity): max points {calc.rival_driver} can score before {calc.target_driver} is locked out.
                 </span>
               </div>
 
@@ -337,7 +339,7 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
                   )}
                 </span>
                 <span className="text-xs text-[#8F96A3] mt-1 block">
-                  Evaluated using statutory race finishing position hierarchy.
+                  Evaluated using statutory race finishing hierarchy. Note: future race results can alter tie-break standing.
                 </span>
               </div>
             </div>

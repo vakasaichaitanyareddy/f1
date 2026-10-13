@@ -751,6 +751,21 @@ def test_scenario_calculator_mathematical_bounds():
     assert res_tie_max_loses["min_points_needed_if_rival_zero"] is None
     assert res_tie_max_loses["max_rival_points_allowed"] == 0.0
 
+    # 10. Clamping test: max_rival_points_allowed cannot exceed rival's actual remaining points capacity
+    # For leading target: VER (26) vs PER (18) with 1 GP remaining (capacity = 26.0 pts)
+    # Theoretical cap = 26 + 26 - 18 = 34.0, but PER can score at most 26.0 points!
+    res_clamped = calculate_driver_scenario_to_win(
+        target_driver_code="VER",
+        target_points=26.0,
+        rival_driver_code="PER",
+        rival_points=18.0,
+        remaining_gps=1,
+        remaining_sprints=0,
+        season=2024
+    )
+    assert res_clamped["max_remaining_capacity"] == 26.0
+    assert res_clamped["max_rival_points_allowed"] == 26.0  # Clamped to remaining capacity, not 34.0
+
 def test_championship_monte_carlo_simulator():
     from app.championship.simulator import ChampionshipMonteCarloSimulator
 

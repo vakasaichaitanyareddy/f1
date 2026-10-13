@@ -836,13 +836,15 @@ def calculate_driver_scenario_to_win(
         # (Target cannot score more than max_target_capacity, while rival has higher base points).
         # Clinching requires rival to drop points. Thus, independent clinch threshold is N/A.
         min_points_to_clinch = None
-        # Maximum additional points rival can score before target is eliminated (assuming target scores max)
-        max_rival_points_allowed = max(0.0, max_possible_target_points - rival_points)
+        # Maximum additional points rival can score before target is eliminated (assuming target scores max):
+        # Clamped to rival's actual remaining capacity so it cannot exceed what is mathematically achievable.
+        theoretical_cap = max(0.0, max_possible_target_points - rival_points)
+        max_rival_points_allowed = min(max_rival_capacity, theoretical_cap)
     elif point_gap == 0:
         # Tied with rival
         min_target_points_needed = 0.0 if countback_tie_advantage else 1.0
         min_points_to_clinch = None
-        max_rival_points_allowed = max_target_capacity
+        max_rival_points_allowed = max_rival_capacity
     else:
         # Ahead of rival (target is leading)
         lead = abs(point_gap)
