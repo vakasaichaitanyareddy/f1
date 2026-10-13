@@ -715,6 +715,42 @@ def test_scenario_calculator_mathematical_bounds():
     assert res_zero_remaining_ahead["min_points_to_clinch"] == 0.0
     assert res_zero_remaining_ahead["max_rival_points_allowed"] == 0.0
 
+    # 8. Target can only tie at max capacity and WINS countback (retains championship eligibility)
+    # Target (100) + 1 GP (26 pts max) = 126 max points. Rival has 126 points.
+    # Target has more wins hypothetically [1, 1] vs rival [2, 2] -> target wins tie break.
+    res_tie_max_wins = calculate_driver_scenario_to_win(
+        target_driver_code="NOR",
+        target_points=100.0,
+        rival_driver_code="VER",
+        rival_points=126.0,
+        remaining_gps=1,
+        remaining_sprints=0,
+        target_finishes=[1],
+        rival_finishes=[2, 2],
+        season=2024
+    )
+    assert res_tie_max_wins["is_eliminated"] is False
+    assert res_tie_max_wins["countback_tie_advantage"] is True
+    assert res_tie_max_wins["min_points_needed_if_rival_zero"] == 26.0
+
+    # 9. Target can only tie at max capacity and LOSES countback (mathematically eliminated)
+    # Target (100) + 1 GP (26 pts max) = 126 max points. Rival has 126 points.
+    # Rival has 5 wins [1, 1, 1, 1, 1] vs target having at most 1 win [1] -> rival wins countback.
+    res_tie_max_loses = calculate_driver_scenario_to_win(
+        target_driver_code="NOR",
+        target_points=100.0,
+        rival_driver_code="VER",
+        rival_points=126.0,
+        remaining_gps=1,
+        remaining_sprints=0,
+        target_finishes=[2, 2],
+        rival_finishes=[1, 1, 1, 1, 1],
+        season=2024
+    )
+    assert res_tie_max_loses["is_eliminated"] is True
+    assert res_tie_max_loses["min_points_needed_if_rival_zero"] is None
+    assert res_tie_max_loses["max_rival_points_allowed"] == 0.0
+
 def test_championship_monte_carlo_simulator():
     from app.championship.simulator import ChampionshipMonteCarloSimulator
 
