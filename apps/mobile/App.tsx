@@ -11,10 +11,17 @@ interface DriverTiming {
   team_name: string;
   team_color: string;
   position: number;
+  grid?: number;
+  current_lap?: number;
   gap_to_leader?: number;
   interval?: number;
   last_lap_time?: number;
   best_lap_time?: number;
+  sectors?: {
+    sector_1?: number;
+    sector_2?: number;
+    sector_3?: number;
+  };
   tire_compound?: string;
   stint_lap_count: number;
   positions_gained: number;
@@ -106,8 +113,8 @@ export default function App() {
   const [selectedRival, setSelectedRival] = useState<string>('VER');
   const [calculatorData, setCalculatorData] = useState<any>(null);
 
-  const formatLapTime = (timeInSeconds?: number) => {
-    if (!timeInSeconds) return "-:--.---";
+  const formatLapTime = (timeInSeconds?: number | null) => {
+    if (timeInSeconds == null || !Number.isFinite(timeInSeconds) || timeInSeconds <= 0) return "-:--.---";
     const minutes = Math.floor(timeInSeconds / 60);
     const seconds = (timeInSeconds % 60).toFixed(3);
     return `${minutes}:${seconds.padStart(6, '0')}`;
@@ -163,16 +170,25 @@ export default function App() {
       })
       .catch(() => setLoading(false));
 
-    // Connect to WebSocket for selected session
-    let ws: WebSocket;
+    let ws: WebSocket | null = null;
+    let isSubscribed = true;
+
     try {
       ws = new WebSocket(`ws://localhost:8000/ws/live/${selectedSessionId}`);
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => {
+        if (isSubscribed) setConnected(true);
+      };
       ws.onmessage = (event) => {
+        if (!isSubscribed) return;
         try {
           const msg = JSON.parse(event.data);
-          // Reject messages intended for another session if received after a switch
-          if (msg.session_id && msg.session_id !== selectedSessionId) {
+          // Pass control messages (PING / PONG)
+          if (msg.type === 'PING' || msg.type === 'PONG') {
+            return;
+          }
+          // Data-bearing events must belong strictly to the active selectedSessionId.
+          // Reject any data-bearing message with mismatched or absent session_id.
+          if (!msg.session_id || msg.session_id !== selectedSessionId) {
             return;
           }
           if (msg.type === 'SNAPSHOT') {
@@ -180,9 +196,9 @@ export default function App() {
           } else if (msg.type === 'TIMING') {
             setLiveData(prev => prev ? {
               ...prev,
-              current_lap: msg.payload.current_lap ?? prev.current_lap,
-              track_status: msg.payload.track_status ?? prev.track_status,
-              timing_tower: msg.payload.timing_tower ?? prev.timing_tower,
+              current_lap: msg.payload?.current_lap ?? prev.current_lap,
+              track_status: msg.payload?.track_status ?? prev.track_status,
+              timing_tower: msg.payload?.timing_tower ?? prev.timing_tower,
               data_state: msg.data_state ?? prev.data_state
             } : prev);
           } else if (msg.type === 'MAP_POSITIONS') {
@@ -203,18 +219,29 @@ export default function App() {
               return {
                 ...prev,
                 race_control: updatedRc,
-                track_status: msg.payload.flag === 'RED' ? 'RED' : (msg.payload.flag?.includes('YELLOW') ? 'YELLOW' : prev.track_status)
+                track_status: msg.payload?.flag === 'RED' ? 'RED' : (msg.payload?.flag?.includes('YELLOW') ? 'YELLOW' : prev.track_status)
               };
             });
           }
         } catch (_) {}
       };
-      ws.onclose = () => setConnected(false);
-      ws.onerror = () => setConnected(false);
+      ws.onclose = () => {
+        if (isSubscribed) setConnected(false);
+      };
+      ws.onerror = () => {
+        if (isSubscribed) setConnected(false);
+      };
     } catch (_) {}
 
     return () => {
-      if (ws) ws.close();
+      isSubscribed = false;
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.close();
+      }
     };
   }, [selectedSessionId]);
 
@@ -351,22 +378,72 @@ export default function App() {
                     style={[styles.timingRow, selectedDriverNum === t.driver_number && styles.timingRowSelected]}
                     onPress={() => setSelectedDriverNum(t.driver_number)}
                   >
-                    <Text style={styles.positionText}>{spoilerShield ? "•" : `P${t.position}`}</Text>
-                    <View style={[styles.teamAccent, { backgroundColor: t.team_color }]} />
-                    <View style={styles.driverInfo}>
-                      <Text style={styles.driverCode}>{t.driver_code}</Text>
-                      <Text style={styles.teamName}>{t.team_name}</Text>
+                    <View style={styles.timingRowLeft}>
+                      <Text style={styles.positionText}>{spoilerShield ? "•" : `P${t.position}`}</Text>
+                      {/* Gain / Loss indicator */}
+                      {!spoilerShield && (
+                        <View style={styles.gainBox}>
+                          {typeof t.positions_gained === 'number' && Number.isFinite(t.positions_gained) ? (
+                            t.positions_gained > 0 ? (
+                              <Text style={styles.gainGreen}>▲{t.positions_gained}</Text>
+                            ) : t.positions_gained < 0 ? (
+                              <Text style={styles.gainRed}>▼{Math.abs(t.positions_gained)}</Text>
+                            ) : (
+                              <Text style={styles.gainGray}>-</Text>
+                            )
+                          ) : (
+                            <Text style={styles.gainGray}>-</Text>
+                          )}
+                        </View>
+                      )}
+                      <View style={[styles.teamAccent, { backgroundColor: t.team_color }]} />
+                      <View style={styles.driverInfo}>
+                        <View style={styles.driverTopRow}>
+                          <Text style={styles.driverCode}>{t.driver_code}</Text>
+                          {typeof t.current_lap === 'number' && t.current_lap > 0 ? (
+                            <Text style={styles.driverLap}>L{t.current_lap}</Text>
+                          ) : null}
+                        </View>
+                        <Text style={styles.teamName} numberOfLines={1}>{t.team_name}</Text>
+                        {/* Sectors S1 / S2 / S3 */}
+                        {!spoilerShield && (
+                          <View style={styles.sectorRow}>
+                            <Text style={styles.sectorText}>
+                              S1: {typeof t.sectors?.sector_1 === 'number' && Number.isFinite(t.sectors.sector_1) && t.sectors.sector_1 > 0 ? t.sectors.sector_1.toFixed(1) : '-'}
+                            </Text>
+                            <Text style={styles.sectorDot}>•</Text>
+                            <Text style={styles.sectorText}>
+                              S2: {typeof t.sectors?.sector_2 === 'number' && Number.isFinite(t.sectors.sector_2) && t.sectors.sector_2 > 0 ? t.sectors.sector_2.toFixed(1) : '-'}
+                            </Text>
+                            <Text style={styles.sectorDot}>•</Text>
+                            <Text style={styles.sectorText}>
+                              S3: {typeof t.sectors?.sector_3 === 'number' && Number.isFinite(t.sectors.sector_3) && t.sectors.sector_3 > 0 ? t.sectors.sector_3.toFixed(1) : '-'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                    <View style={styles.tireBadge}>
-                      <Text style={styles.tireText}>{t.tire_compound?.[0] || "?"} L{t.stint_lap_count}</Text>
-                    </View>
-                    <View style={styles.lapTimes}>
-                      <Text style={styles.gapText}>
-                        {spoilerShield ? "-" : (t.gap_to_leader === 0 ? "LEADER" : `+${t.gap_to_leader?.toFixed(3)}s`)}
-                      </Text>
-                      <Text style={styles.bestTimeText}>
-                        {spoilerShield ? "-:--.---" : formatLapTime(t.best_lap_time)}
-                      </Text>
+                    <View style={styles.timingRowRight}>
+                      <View style={styles.tireBadge}>
+                        <Text style={styles.tireText}>{t.tire_compound?.[0] || "?"} L{t.stint_lap_count ?? 0}</Text>
+                      </View>
+                      <View style={styles.lapTimes}>
+                        <Text style={styles.gapText}>
+                          {spoilerShield ? "-" : (
+                            t.gap_to_leader === 0 ? "LEADER" :
+                            (typeof t.gap_to_leader === 'number' && Number.isFinite(t.gap_to_leader) && t.gap_to_leader > 0) ? `+${t.gap_to_leader.toFixed(3)}s` : "-"
+                          )}
+                        </Text>
+                        <Text style={styles.intervalText}>
+                          {spoilerShield ? "-" : (
+                            t.interval === 0 ? "INT: -" :
+                            (typeof t.interval === 'number' && Number.isFinite(t.interval) && t.interval > 0) ? `INT: +${t.interval.toFixed(3)}s` : "INT: -"
+                          )}
+                        </Text>
+                        <Text style={styles.bestTimeText}>
+                          {spoilerShield ? "-:--.---" : formatLapTime(t.best_lap_time)}
+                        </Text>
+                      </View>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -852,43 +929,102 @@ const styles = StyleSheet.create({
   timingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#15171E',
     borderBottomWidth: 1,
     borderBottomColor: '#272A35',
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
+  timingRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  timingRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   positionText: {
     color: '#FFF',
     fontWeight: 'bold',
-    width: 28,
+    width: 24,
     fontSize: 13,
+    fontFamily: 'monospace',
+  },
+  gainBox: {
+    width: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  gainGreen: {
+    color: '#30D158',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  gainRed: {
+    color: '#E10600',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  gainGray: {
+    color: '#8F96A3',
+    fontSize: 11,
     fontFamily: 'monospace',
   },
   teamAccent: {
     width: 3,
-    height: 24,
+    height: 32,
     borderRadius: 1.5,
     marginRight: 8,
   },
   driverInfo: {
     flex: 1,
   },
+  driverTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   driverCode: {
     color: '#FFF',
     fontWeight: 'bold',
     fontSize: 13,
   },
+  driverLap: {
+    color: '#8F96A3',
+    fontSize: 10,
+    fontFamily: 'monospace',
+  },
   teamName: {
     color: '#8F96A3',
     fontSize: 11,
+  },
+  sectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    gap: 4,
+  },
+  sectorText: {
+    color: '#8F96A3',
+    fontSize: 9,
+    fontFamily: 'monospace',
+  },
+  sectorDot: {
+    color: '#3F4452',
+    fontSize: 8,
   },
   tireBadge: {
     backgroundColor: '#272A35',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 3,
-    marginRight: 12,
+    marginRight: 10,
   },
   tireText: {
     color: '#FFCC00',
@@ -897,11 +1033,17 @@ const styles = StyleSheet.create({
   },
   lapTimes: {
     alignItems: 'flex-end',
+    minWidth: 70,
   },
   gapText: {
     color: '#FFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  intervalText: {
+    color: '#8F96A3',
+    fontSize: 10,
     fontFamily: 'monospace',
   },
   bestTimeText: {

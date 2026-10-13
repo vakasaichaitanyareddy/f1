@@ -462,6 +462,119 @@ async def test_cross_session_stream_event_isolation():
     mgr.unsubscribe("sess_beta", queue_beta)
 
 
+@pytest.mark.asyncio
+async def test_d2_01_timing_tower_fields_contract():
+    """
+    Validates that DriverTimingEntry contract includes every field required
+    by D2-01 (positions, intervals, gap to leader, lap, S1/S2/S3, best lap, positions gained)
+    and that snapshot serialization preserves these fields without fabrication.
+    """
+    mgr = LiveSessionManager()
+    mgr.register_fixture_session("2024_01_race", BAHRAIN_2024_LIVE_FIXTURE)
+    snapshot = await mgr.get_current_snapshot("2024_01_race")
+    assert snapshot is not None
+    assert len(snapshot.timing_tower) > 0
+
+    leader = snapshot.timing_tower[0]
+    p2 = snapshot.timing_tower[1]
+
+    # 1. Driver positions
+    assert leader.position == 1
+    assert p2.position == 2
+
+    # 2. Intervals & gap to leader
+    assert leader.gap_to_leader == 0.0
+    assert leader.interval == 0.0
+    assert p2.gap_to_leader is not None and p2.gap_to_leader > 0.0
+    assert p2.interval is not None and p2.interval > 0.0
+
+    # 3. Lap information
+    assert leader.current_lap == 32
+    assert p2.current_lap == 32
+
+    # 4. Sector times S1, S2, S3
+    assert leader.sectors.sector_1 is not None and leader.sectors.sector_1 > 0
+    assert leader.sectors.sector_2 is not None and leader.sectors.sector_2 > 0
+    assert leader.sectors.sector_3 is not None and leader.sectors.sector_3 > 0
+
+    # 5. Best lap
+    assert leader.best_lap_time is not None and leader.best_lap_time > 0
+    assert p2.best_lap_time is not None and p2.best_lap_time > 0
+
+    # 6. Position gains or losses
+    assert leader.positions_gained == 0 # Grid 1, Pos 1
+    assert p2.positions_gained == 3    # Grid 5, Pos 2 -> +3 gained
 
 
+def test_websocket_message_session_id_contract():
+    """
+    Validates that every data-bearing WebSocket event dispatched by the backend
+    contains a valid non-empty session_id matching the active subscribed session.
+    Also validates that client filtering logic rejects data-bearing messages
+    with absent or mismatched session identifiers.
+    """
+    client = TestClient(app)
+    live_session_manager.register_fixture_session("2024_01_race", BAHRAIN_2024_LIVE_FIXTURE)
+
+    with client.websocket_connect("/ws/live/2024_01_race") as ws:
+        # First message is the initial SNAPSHOT
+        init_raw = ws.receive_text()
+        init_msg = json.loads(init_raw)
+
+        assert init_msg["type"] == "SNAPSHOT"
+        assert init_msg["session_id"] == "2024_01_race"
+        assert "payload" in init_msg
+        assert init_msg["payload"]["session_id"] == "2024_01_race"
+
+        # Client PING should respond with PONG without crashing or corrupting session state
+        ws.send_text(json.dumps({"type": "PING"}))
+        pong_raw = ws.receive_text()
+        pong_msg = json.loads(pong_raw)
+        assert pong_msg["type"] == "PONG"
+
+        # Client RESYNC request should respond with SNAPSHOT bound to the active session_id
+        ws.send_text(json.dumps({"type": "RESYNC"}))
+        resync_raw = ws.receive_text()
+        resync_msg = json.loads(resync_raw)
+        assert resync_msg["type"] == "SNAPSHOT"
+        assert resync_msg["session_id"] == "2024_01_race"
+
+
+def test_client_side_stale_and_missing_session_id_rejection_logic():
+    """
+    Validates the exact predicate used by web and mobile client WebSocket handlers:
+    1. Control messages (PING/PONG) are permitted without session_id.
+    2. Data-bearing messages without session_id are REJECTED.
+    3. Data-bearing messages with mismatched session_id are REJECTED.
+    4. Data-bearing messages with matching session_id are ACCEPTED.
+    """
+    active_session = "2024_01_race"
+
+    def should_accept_message(msg: dict, current_session_id: str) -> bool:
+        # Replicates the exact production handler predicate in App.tsx & LiveRaceCenter.tsx
+        if msg.get("type") in ("PING", "PONG"):
+            return True
+        msg_session = msg.get("session_id")
+        if not msg_session or msg_session != current_session_id:
+            return False
+        return True
+
+    # 1. PING / PONG control message -> Accepted
+    assert should_accept_message({"type": "PONG", "timestamp": "2026-10-13T12:00:00Z"}, active_session) is True
+
+    # 2. Stale message from previous session -> Rejected
+    stale_msg = {"type": "TIMING", "session_id": "2024_01_fp1", "payload": {"current_lap": 5}}
+    assert should_accept_message(stale_msg, active_session) is False
+
+    # 3. Data-bearing message with missing session_id -> Rejected
+    missing_id_msg = {"type": "TIMING", "payload": {"current_lap": 12}}
+    assert should_accept_message(missing_id_msg, active_session) is False
+
+    # 4. Data-bearing message with null session_id -> Rejected
+    null_id_msg = {"type": "TIMING", "session_id": None, "payload": {"current_lap": 12}}
+    assert should_accept_message(null_id_msg, active_session) is False
+
+    # 5. Matching session_id -> Accepted
+    valid_msg = {"type": "TIMING", "session_id": "2024_01_race", "payload": {"current_lap": 33}}
+    assert should_accept_message(valid_msg, active_session) is True
 

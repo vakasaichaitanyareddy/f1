@@ -217,12 +217,15 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
       })
       .catch((err) => console.error("Snapshot fetch error", err));
 
+    let isSubscribed = true;
+
     // 2. WebSocket setup
     const wsUrl = `ws://localhost:8000/ws/live/${sessionId}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (!isSubscribed) return;
       setConnectionState("CONNECTED");
       // Setup heartbeat every 15s
       heartbeatTimerRef.current = setInterval(() => {
@@ -233,10 +236,17 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
     };
 
     ws.onmessage = (event) => {
+      if (!isSubscribed) return;
       try {
         const msg = JSON.parse(event.data);
-        if (msg.session_id && msg.session_id !== sessionId) {
-          return; // Ignore stale messages from previous session
+        // Pass control messages (PING / PONG)
+        if (msg.type === "PING" || msg.type === "PONG") {
+          return;
+        }
+        // Data-bearing events must belong strictly to the active sessionId.
+        // Reject any data-bearing message with mismatched or absent session_id.
+        if (!msg.session_id || msg.session_id !== sessionId) {
+          return;
         }
         if (msg.type === "SNAPSHOT") {
           setSnapshot(msg.payload);
@@ -245,21 +255,21 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
             if (!prev) return prev;
             return {
               ...prev,
-              current_lap: msg.payload.current_lap ?? prev.current_lap,
-              track_status: msg.payload.track_status ?? prev.track_status,
-              timing_tower: msg.payload.timing_tower ?? prev.timing_tower,
-              weather: msg.payload.weather ?? prev.weather,
+              current_lap: msg.payload?.current_lap ?? prev.current_lap,
+              track_status: msg.payload?.track_status ?? prev.track_status,
+              timing_tower: msg.payload?.timing_tower ?? prev.timing_tower,
+              weather: msg.payload?.weather ?? prev.weather,
               data_state: msg.data_state ?? prev.data_state,
             };
           });
         } else if (msg.type === "RACE_CONTROL") {
           setSnapshot((prev) => {
             if (!prev) return prev;
-            const updatedRc = [...prev.race_control, msg.payload].slice(-30);
+            const updatedRc = [...(prev.race_control || []), msg.payload].slice(-30);
             return {
               ...prev,
               race_control: updatedRc,
-              track_status: msg.payload.flag === "RED" ? "RED" : (msg.payload.flag?.includes("YELLOW") ? "YELLOW" : prev.track_status)
+              track_status: msg.payload?.flag === "RED" ? "RED" : (msg.payload?.flag?.includes("YELLOW") ? "YELLOW" : prev.track_status)
             };
           });
         } else if (msg.type === "WEATHER") {
@@ -281,20 +291,24 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
       } catch (err) {
         console.error("WS Parse error", err);
       }
-
     };
 
     ws.onclose = () => {
-      setConnectionState("DISCONNECTED");
+      if (isSubscribed) setConnectionState("DISCONNECTED");
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
     };
 
     ws.onerror = () => {
-      setConnectionState("ERROR");
+      if (isSubscribed) setConnectionState("ERROR");
     };
 
     return () => {
+      isSubscribed = false;
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onclose = null;
+      ws.onerror = null;
       ws.close();
     };
   }, [sessionId]);
