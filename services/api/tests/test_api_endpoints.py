@@ -106,6 +106,30 @@ async def test_championship_intelligence_api():
         prov = data["provenance"]
         assert prov["is_test_fixture"] is True
 
+@pytest.mark.asyncio
+async def test_championship_scenario_calculator_endpoint():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Valid driver PER against leader VER
+        res = await client.get("/api/v1/championship/calculator?driver_code=PER&rival_code=VER&remaining_gps=23&remaining_sprints=6")
+        assert res.status_code == 200
+        calc = res.json()
+        assert calc["status"] == "SUCCESS"
+        assert calc["target"]["driver_code"] == "PER"
+        assert calc["rival"]["driver_code"] == "VER"
+        assert "calculation" in calc
+        math_res = calc["calculation"]
+        assert math_res["target_driver"] == "PER"
+        assert math_res["rival_driver"] == "VER"
+        assert math_res["point_gap"] > 0
+        assert math_res["max_remaining_capacity"] > 0
+        assert math_res["is_eliminated"] is False
+        assert len(math_res["scenarios"]) >= 1
+
+        # 2. Unknown driver returns 404
+        res_404 = await client.get("/api/v1/championship/calculator?driver_code=XYZ")
+        assert res_404.status_code == 404
+
+
 # 2. Authentication & Authorization Edge Cases
 @pytest.mark.asyncio
 async def test_auth_registration_and_duplicate():

@@ -753,3 +753,124 @@ def calculate_clinch_threshold(
                 return (True, lead_gap)
 
     return (False, lead_gap)
+
+def calculate_driver_scenario_to_win(
+    target_driver_code: str,
+    target_points: float,
+    rival_driver_code: str,
+    rival_points: float,
+    remaining_gps: int,
+    remaining_sprints: int = 0,
+    target_finishes: Optional[List[int]] = None,
+    rival_finishes: Optional[List[int]] = None,
+    season: int = 2024,
+    target_qualifying_finishes: Optional[List[int]] = None,
+    rival_qualifying_finishes: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Pure mathematical scenario analysis: "What does this driver need to win?"
+    Computes exact point thresholds, rival point allowances, clinching round,
+    FIA countback tie-break implications, and finishing requirement matrix.
+    Mathematically bounded and deterministic; no exponential simulations.
+    """
+    point_gap = rival_points - target_points  # Positive if rival is ahead, negative if target is ahead
+    max_target_capacity = calculate_max_remaining_points(
+        remaining_gps, remaining_sprints, season=season, is_constructor=False
+    )
+    max_rival_capacity = calculate_max_remaining_points(
+        remaining_gps, remaining_sprints, season=season, is_constructor=False
+    )
+
+    max_possible_target_points = target_points + max_target_capacity
+    is_eliminated = max_possible_target_points < rival_points
+
+    # Check tie break if tied at max capacity vs rival's current points
+    countback_tie_advantage = False
+    if max_possible_target_points == rival_points and target_finishes and rival_finishes:
+        hypothetical_target = list(target_finishes) + [1] * remaining_gps
+        tb = evaluate_fia_countback(
+            hypothetical_target,
+            rival_finishes,
+            qualifying_finishes_a=target_qualifying_finishes,
+            qualifying_finishes_b=rival_qualifying_finishes,
+            season=season
+        )
+        if tb < 0:
+            is_eliminated = True
+        elif tb > 0:
+            countback_tie_advantage = True
+
+    # Minimum points target driver needs assuming rival scores 0
+    if is_eliminated:
+        min_target_points_needed = None
+        max_rival_points_allowed = 0.0
+    elif point_gap > 0:
+        # Behind rival
+        # If countback tie advantage, target needs exactly point_gap points to tie and win countback
+        # Otherwise target needs point_gap + 0.5 (or + 1) points to surpass rival
+        if countback_tie_advantage:
+            min_target_points_needed = point_gap
+        else:
+            min_target_points_needed = point_gap + 1.0 if season >= 2010 else point_gap + 1.0
+        # Maximum additional points rival can score before target is eliminated (assuming target scores max)
+        max_rival_points_allowed = max(0.0, max_possible_target_points - rival_points)
+    elif point_gap == 0:
+        # Tied with rival
+        min_target_points_needed = 1.0
+        max_rival_points_allowed = max_target_capacity
+    else:
+        # Ahead of rival (target is leading)
+        lead = abs(point_gap)
+        # Target clinches if lead exceeds rival's remaining capacity
+        min_target_points_needed = max(0.0, max_rival_capacity - lead + 1.0)
+        max_rival_points_allowed = max_rival_capacity
+
+    # Clinch assessment
+    clinched_now = False
+    if point_gap < 0 and abs(point_gap) > max_rival_capacity:
+        clinched_now = True
+
+    # Possible outcomes breakdown per race
+    gp_max_pts = 26.0 if (2019 <= season <= 2024) else 25.0
+    outcomes = []
+    if not is_eliminated and not clinched_now and remaining_gps > 0:
+        # Scenario 1: Target wins all remaining GPs
+        target_pts_scenario_1 = remaining_gps * gp_max_pts
+        rival_cap_scenario_1 = (target_points + target_pts_scenario_1) - rival_points
+        outcomes.append({
+            "name": f"Maximum Attack ({remaining_gps} Wins)",
+            "description": f"Target wins all remaining {remaining_gps} Grand Prix events.",
+            "target_score": target_pts_scenario_1,
+            "rival_max_allowed": max(0.0, rival_cap_scenario_1),
+            "clinch_feasible": True
+        })
+
+        # Scenario 2: Average podium finishes (P2/P3: ~16 pts per race)
+        avg_podium_pts = remaining_gps * 16.0
+        rival_cap_scenario_2 = (target_points + avg_podium_pts) - rival_points
+        outcomes.append({
+            "name": "Consistent Podium Finishes (Avg P2/P3)",
+            "description": f"Target averages podium finishes across remaining {remaining_gps} races (~16 pts/race).",
+            "target_score": avg_podium_pts,
+            "rival_max_allowed": max(0.0, rival_cap_scenario_2),
+            "clinch_feasible": (target_points + avg_podium_pts) >= rival_points
+        })
+
+    return {
+        "target_driver": target_driver_code,
+        "target_points": target_points,
+        "rival_driver": rival_driver_code,
+        "rival_points": rival_points,
+        "point_gap": point_gap,
+        "remaining_gps": remaining_gps,
+        "remaining_sprints": remaining_sprints,
+        "max_remaining_capacity": max_target_capacity,
+        "max_possible_target_points": max_possible_target_points,
+        "is_eliminated": is_eliminated,
+        "clinched_now": clinched_now,
+        "min_points_needed_if_rival_zero": min_target_points_needed,
+        "max_rival_points_allowed": round(max_rival_points_allowed, 1),
+        "countback_tie_advantage": countback_tie_advantage,
+        "scenarios": outcomes
+    }
+

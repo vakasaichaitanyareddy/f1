@@ -68,8 +68,8 @@
 | D1-01 | OpenF1 & FastF1 backend data adapter with quota & retry handling | R2 | [DONE] | J1-01 | OpenF1Provider adapter implemented with endpoints for drivers, positions, laps, pit stops, stints, weather, race control, location, and telemetry |
 | D1-02 | Data freshness status indicator (LIVE, DELAYED, STALE, HISTORICAL, UNAVAILABLE) | R2 | [DONE] | D1-01 | Explicit provenance tagging with 30-second stale detection threshold |
 | D1-03 | Upstream MQTT/WebSocket live streaming adapter with token refresh (`openf1_stream.py`) | R2.1 | [DONE] | D1-01 | OpenF1StreamManager connects to `mqtt.openf1.org:8883` over TLS using OAuth2 token authentication from `https://api.openf1.org/token`. Live connection without credentials reports `BLOCKED: credentials not configured`. |
-| D1-04 | Message deduplication and multi-session event filtering | R2.1 | [DONE] | D1-03 | Sliding window deduplication cache tested in `test_openf1_stream_manager_deduplication_and_filtering` |
-| D1-05 | Operational Stream Diagnostics endpoint & UI inspector (`/api/v1/live/diagnostics`) | R2.1 | [DONE] | D1-03 | Operational metrics (broker, connection status, topics, client count, lag, deduplication count) verified via REST endpoint and UI modal |
+| D1-04 | Message deduplication, out-of-order rejection, and multi-session event filtering | R2.1.2 | [DONE] | D1-03 | Bounded OrderedDict deduplication with content signature comparison, out-of-order rejection, and lap sector progressive enrichment tested in `test_live_race_center.py` |
+| D1-05 | Operational Stream Diagnostics endpoint & UI inspector (`/api/v1/live/diagnostics`) | R2.1.2 | [DONE] | D1-03 | Operational metrics (broker, connection status `CONNECTED_RECEIVING`, `CONNECTED_IDLE`, `CREDENTIALS_MISSING`, topics, lag, deduplication count, out-of-order count) verified via REST endpoint and UI modal |
 | D1-06 | Dynamic Session Selector & Upstream Session Key Mapping (`/api/v1/live/sessions`) | R2.1 | [DONE] | D1-01 | Internal ID to provider key resolution (`2024_01_race` -> `9472`) and dynamic selector implemented in Web and Mobile apps |
 | D1-07 | Multi-topic WebSocket delta broadcasting to client panels | R2.1.1 | [DONE] | D1-03 | `on_stream_event` routes `v1/position`, `v1/intervals`, `v1/laps`, `v1/pit`, `v1/stints`, `v1/location`, `v1/car_data`, `v1/weather`, `v1/race_control` into typed client deltas and Redis |
 | D2-01 | Live Timing Tower (Position, Interval, Gap to Leader, Lap, S1/S2/S3, Best Lap) | R2 | [DONE] | D1-01 | Web & mobile timing towers with gaps, intervals, lap times, sector splits, and position deltas |
@@ -82,17 +82,18 @@
 
 ---
 
-### Module E: Championship Intelligence (Release 3)
+### Module E: Championship Intelligence (Release 2.1.2 & Release 3)
 | Feature ID | Name / Description | Release Target | Status | Dependencies | Verification Evidence & Criteria |
 |---|---|---|---|---|---|
-| E1-01 | Championship Dashboard (Current points, gap, remaining points available, title contenders) | R1/R3 | [DONE] | C3-01 | Tested via `/api/v1/championship/intelligence` |
-| E2-01 | Exact Minimum-Points Engine (mathematical clinching conditions & elimination logic) | R1/R3 | [DONE] | E1-01 | Tested across 10 distinct regression test scenarios |
-| E2-02 | Rival-Points Cap Calculator (maximum permissible rival points for title preservation) | R3 | [TODO] | E2-01 | Scheduled for Release 3 deep scenario engine |
-| E3-01 | Race-by-race Finishing Position Scenario Matrix with validation against contradictions | R3 | [TODO] | E2-01 | Scheduled for Release 3 |
+| E1-01 | Championship Dashboard (Current points, gap, remaining points available, title contenders) | R1/R2.1.2 | [DONE] | C3-01 | Tested via `/api/v1/championship/intelligence` |
+| E2-01 | Exact Minimum-Points Engine (mathematical clinching conditions & elimination logic) | R1/R2.1.2 | [DONE] | E1-01 | Tested across 10 distinct regression test scenarios in `test_championship_engine.py` |
+| E2-02 | Rival-Points Cap Calculator (maximum permissible rival points for title preservation) | R2.1.2 | [DONE] | E2-01 | Implemented via `calculate_driver_scenario_to_win()` and tested via unit tests & `/api/v1/championship/calculator` |
+| E3-01 | Interactive "What does this driver need to win?" Scenario Calculator | R2.1.2 | [DONE] | E2-01 | Integrated web component `ChampionshipIntelligence.tsx` and mobile tab with contender selection, rival cap, minimum points, countback resolution, and scenario pathways |
 | E3-02 | Saved and shareable championship scenario URLs | R3 | [TODO] | E3-01 | Scheduled for Release 3 |
 | E4-01 | Monte Carlo Season Simulator (10,000+ runs with DNF, pace variance, grid penalties) | R3 | [TODO] | E1-01 | Scheduled for Release 3 |
 | E4-02 | Model calibration, error metrics (Brier score / log loss), and historical backtesting | R3 | [TODO] | E4-01 | Scheduled for Release 3 |
-| E5-01 | Championship Visualizations (Probability trend lines, Clinching combinations table) | R3 | [DONE] | E4-01 | Web UI interactive contender matrix verified |
+| E5-01 | Championship Visualizations (Probability trend lines, Clinching combinations table) | R2.1.2 | [DONE] | E4-01 | Web UI interactive contender matrix and scenario cards verified |
+
 
 ---
 

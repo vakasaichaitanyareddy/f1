@@ -599,6 +599,57 @@ def test_season_specific_countback_behavior():
         season=2026,
     ) == 0
 
+def test_scenario_calculator_mathematical_bounds():
+    from app.championship.engine import calculate_driver_scenario_to_win
+
+    # 1. Target driver trailing by 20 points with 2 GPs remaining (no sprints, 2024: 26 max pts/GP = 52 max)
+    res = calculate_driver_scenario_to_win(
+        target_driver_code="NOR",
+        target_points=100.0,
+        rival_driver_code="VER",
+        rival_points=120.0,
+        remaining_gps=2,
+        remaining_sprints=0,
+        season=2024
+    )
+    assert res["target_driver"] == "NOR"
+    assert res["rival_driver"] == "VER"
+    assert res["point_gap"] == 20.0
+    assert res["is_eliminated"] is False
+    assert res["clinched_now"] is False
+    assert res["min_points_needed_if_rival_zero"] == 21.0
+    # Rival cap: NOR max points = 100 + 52 = 152. Max VER can score = 152 - 120 = 32.0 pts
+    assert res["max_rival_points_allowed"] == 32.0
+    assert len(res["scenarios"]) == 2
+
+    # 2. Target driver mathematically eliminated (trailing by 60 with 2 GPs remaining -> 52 max pts)
+    res_elim = calculate_driver_scenario_to_win(
+        target_driver_code="HAM",
+        target_points=50.0,
+        rival_driver_code="VER",
+        rival_points=120.0,
+        remaining_gps=2,
+        remaining_sprints=0,
+        season=2024
+    )
+    assert res_elim["is_eliminated"] is True
+    assert res_elim["min_points_needed_if_rival_zero"] is None
+    assert res_elim["max_rival_points_allowed"] == 0.0
+
+    # 3. Target driver already clinched (leading by 60 with 2 GPs remaining -> max rival capacity = 52)
+    res_clinch = calculate_driver_scenario_to_win(
+        target_driver_code="VER",
+        target_points=200.0,
+        rival_driver_code="NOR",
+        rival_points=130.0,
+        remaining_gps=2,
+        remaining_sprints=0,
+        season=2024
+    )
+    assert res_clinch["clinched_now"] is True
+    assert res_clinch["point_gap"] == -70.0
+
+
 
 
 

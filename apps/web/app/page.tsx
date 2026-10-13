@@ -6,6 +6,8 @@ import {
   ChevronRight, Gauge, Layers, Info, Radio
 } from "lucide-react";
 import LiveRaceCenter from "./components/LiveRaceCenter";
+import ChampionshipIntelligenceView from "./components/ChampionshipIntelligence";
+
 
 interface DriverStanding {
   position: number;
@@ -316,54 +318,9 @@ export default function Home() {
 
         {/* Tab 2: Championship Intelligence */}
         {activeTab === "championship" && (
-          <div className="bg-[#15171E] rounded-xl border border-[#272A35] p-6 space-y-6">
-            <div>
-              <h2 className="text-xl font-extrabold text-white">Championship Mathematics & Clinching Matrix</h2>
-              <p className="text-sm text-[#8F96A3] mt-1">
-                Pure mathematical calculation of maximum achievable points, countbacks, and elimination thresholds under official FIA Sporting Regulations.
-              </p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
-                <thead>
-                  <tr className="bg-[#0D0E12] text-[#8F96A3] text-xs uppercase border-b border-[#272A35]">
-                    <th className="py-3 px-4">Driver</th>
-                    <th className="py-3 px-4">Constructor</th>
-                    <th className="py-3 px-4 text-right">Current Points</th>
-                    <th className="py-3 px-4 text-right">Points Behind</th>
-                    <th className="py-3 px-4 text-right">Max Achievable</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#272A35]">
-                  {champIntel?.contenders.map((c) => (
-                    <tr key={c.driver_id} className="hover:bg-[#1a1d26] transition">
-                      <td className="py-3 px-4 font-bold text-white">
-                        {c.driver_name} <span className="text-[#8F96A3] font-mono font-normal">[{c.driver_code}]</span>
-                      </td>
-                      <td className="py-3 px-4 text-[#8F96A3]">{c.constructor_name}</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-white">{c.points}</td>
-                      <td className="py-3 px-4 text-right font-mono text-[#8F96A3]">-{c.points_behind_leader}</td>
-                      <td className="py-3 px-4 text-right font-mono text-[#64D2FF] font-semibold">{c.max_possible_points}</td>
-                      <td className="py-3 px-4 text-center">
-                        {c.mathematically_eliminated ? (
-                          <span className="px-2 py-0.5 bg-red-950/60 text-red-400 border border-red-800 rounded text-xs">
-                            Eliminated
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-green-950/60 text-green-400 border border-green-800 rounded text-xs">
-                            Contender
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <ChampionshipIntelligenceView spoilerShield={spoilerShield} />
         )}
+
 
         {/* Tab 3: Calendar */}
         {activeTab === "calendar" && (

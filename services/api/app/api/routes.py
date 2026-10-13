@@ -366,6 +366,98 @@ async def get_championship_intelligence(
         }
     }
 
+@api_router.get("/championship/calculator")
+async def get_championship_scenario_calculator(
+    driver_code: str = Query(..., description="Driver acronym to evaluate (e.g. PER, LEC, NOR)"),
+    rival_code: Optional[str] = Query(None, description="Rival driver acronym to compare against (defaults to leader or P2)"),
+    season: int = Query(2024),
+    remaining_gps: int = Query(23),
+    remaining_sprints: int = Query(6),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Evaluates 'What does this driver need to win?' scenario calculator.
+    Provides mathematically verified thresholds, countback evaluation, rival caps,
+    and feasible scenarios without probabilistic heuristics or chat hallucinations.
+    """
+    from app.championship.engine import calculate_driver_scenario_to_win
+
+    standings = await get_driver_standings(db)
+    if not standings:
+        raise HTTPException(status_code=404, detail="No standings data available")
+
+    # Map drivers by code
+    drivers_map = {s.driver.code.upper(): s for s in standings}
+    target = drivers_map.get(driver_code.upper())
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Driver '{driver_code}' not found in standings")
+
+    # Default rival: if target is leader, rival is P2; otherwise rival is leader
+    leader = standings[0]
+    p2 = standings[1] if len(standings) > 1 else leader
+
+    if rival_code:
+        rival = drivers_map.get(rival_code.upper())
+        if not rival:
+            raise HTTPException(status_code=404, detail=f"Rival driver '{rival_code}' not found in standings")
+    else:
+        rival = p2 if target.driver.code == leader.driver.code else leader
+
+    # Fetch actual finishes for target and rival from SessionResultModel for countback analysis
+    target_results_stmt = (
+        select(SessionResultModel.position)
+        .where(SessionResultModel.driver_id == target.driver.id)
+        .order_by(SessionResultModel.position)
+    )
+    rival_results_stmt = (
+        select(SessionResultModel.position)
+        .where(SessionResultModel.driver_id == rival.driver.id)
+        .order_by(SessionResultModel.position)
+    )
+    target_finishes = [p for p in (await db.execute(target_results_stmt)).scalars().all() if p is not None]
+    rival_finishes = [p for p in (await db.execute(rival_results_stmt)).scalars().all() if p is not None]
+
+    scenario_res = calculate_driver_scenario_to_win(
+        target_driver_code=target.driver.code,
+        target_points=target.points,
+        rival_driver_code=rival.driver.code,
+        rival_points=rival.points,
+        remaining_gps=remaining_gps,
+        remaining_sprints=remaining_sprints,
+        target_finishes=target_finishes,
+        rival_finishes=rival_finishes,
+        season=season
+    )
+
+    return {
+        "status": "SUCCESS",
+        "season": season,
+        "target": {
+            "driver_code": target.driver.code,
+            "driver_name": f"{target.driver.first_name} {target.driver.last_name}",
+            "constructor_name": target.driver.constructor_name,
+            "current_points": target.points,
+            "current_position": target.position
+        },
+        "rival": {
+            "driver_code": rival.driver.code,
+            "driver_name": f"{rival.driver.first_name} {rival.driver.last_name}",
+            "constructor_name": rival.driver.constructor_name,
+            "current_points": rival.points,
+            "current_position": rival.position
+        },
+        "calculation": scenario_res,
+        "provenance": {
+            "source": "APEX_GP_CHAMPIONSHIP_MATH_ENGINE",
+            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+            "data_state": "HISTORICAL",
+            "verified": True,
+            "is_test_fixture": True,
+            "notes": "Scenario evaluation executed via pure mathematical bounds."
+        }
+    }
+
+
 # ----------------- LIVE RACE CENTER REST ENDPOINTS -----------------
 
 @api_router.get("/live/diagnostics")

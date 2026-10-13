@@ -50,7 +50,7 @@ interface AvailableSession {
 
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'LIVE' | 'STANDINGS'>('LIVE');
+  const [activeTab, setActiveTab] = useState<'LIVE' | 'STANDINGS' | 'CHAMPIONSHIP'>('LIVE');
   const [standings, setStandings] = useState<any[]>([]);
   const [liveData, setLiveData] = useState<LiveSnapshot | null>(null);
   const [availableSessions, setAvailableSessions] = useState<AvailableSession[]>([]);
@@ -58,6 +58,11 @@ export default function App() {
   const [spoilerShield, setSpoilerShield] = useState(false);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Championship Intelligence state
+  const [selectedDriver, setSelectedDriver] = useState<string>('PER');
+  const [selectedRival, setSelectedRival] = useState<string>('VER');
+  const [calculatorData, setCalculatorData] = useState<any>(null);
 
   const formatLapTime = (timeInSeconds?: number) => {
     if (!timeInSeconds) return "-:--.---";
@@ -78,9 +83,26 @@ export default function App() {
     // 2. Fetch standings
     fetch('http://localhost:8000/api/v1/standings/drivers')
       .then(res => res.json())
-      .then(data => setStandings(data))
+      .then(data => {
+        setStandings(data);
+        if (data.length > 1) {
+          setSelectedDriver(data[1].driver.code);
+          setSelectedRival(data[0].driver.code);
+        }
+      })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!selectedDriver) return;
+    const rivalParam = selectedRival ? `&rival_code=${selectedRival}` : '';
+    fetch(`http://localhost:8000/api/v1/championship/calculator?driver_code=${selectedDriver}${rivalParam}&remaining_gps=23&remaining_sprints=6`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'SUCCESS') setCalculatorData(data);
+      })
+      .catch(() => {});
+  }, [selectedDriver, selectedRival]);
 
   useEffect(() => {
     // Fetch live snapshot REST fallback for selected session
@@ -125,6 +147,8 @@ export default function App() {
     };
   }, [selectedSessionId]);
 
+  const calc = calculatorData?.calculation;
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -146,7 +170,7 @@ export default function App() {
       </View>
 
       {/* Dynamic Session Switcher Bar (Mobile) */}
-      {availableSessions.length > 0 && (
+      {availableSessions.length > 0 && activeTab === 'LIVE' && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sessionPickerScroll}>
           {availableSessions.map((s) => (
             <TouchableOpacity
@@ -174,13 +198,19 @@ export default function App() {
           style={[styles.tabItem, activeTab === 'LIVE' && styles.tabItemActive]}
           onPress={() => setActiveTab('LIVE')}
         >
-          <Text style={[styles.tabText, activeTab === 'LIVE' && styles.tabTextActive]}>LIVE RACE CENTER</Text>
+          <Text style={[styles.tabText, activeTab === 'LIVE' && styles.tabTextActive]}>LIVE</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tabItem, activeTab === 'STANDINGS' && styles.tabItemActive]}
           onPress={() => setActiveTab('STANDINGS')}
         >
           <Text style={[styles.tabText, activeTab === 'STANDINGS' && styles.tabTextActive]}>STANDINGS</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tabItem, activeTab === 'CHAMPIONSHIP' && styles.tabItemActive]}
+          onPress={() => setActiveTab('CHAMPIONSHIP')}
+        >
+          <Text style={[styles.tabText, activeTab === 'CHAMPIONSHIP' && styles.tabTextActive]}>INTELLIGENCE</Text>
         </TouchableOpacity>
       </View>
 
@@ -231,7 +261,7 @@ export default function App() {
               </View>
             ))}
           </View>
-        ) : (
+        ) : activeTab === 'STANDINGS' ? (
           <View>
             <Text style={styles.sectionTitle}>DRIVER WORLD CHAMPIONSHIP</Text>
             {standings.map((s, index) => (
@@ -245,11 +275,107 @@ export default function App() {
               </View>
             ))}
           </View>
+        ) : (
+          <View style={styles.intelContainer}>
+            <Text style={styles.sectionTitle}>CHAMPIONSHIP SCENARIO CALCULATOR</Text>
+            <Text style={styles.intelSub}>What does this driver need to win the title?</Text>
+
+            {/* Contender selector pills */}
+            <Text style={styles.fieldLabel}>CONTENDER</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pickerScroll}>
+              {standings.map((s) => (
+                <TouchableOpacity
+                  key={s.driver.code}
+                  style={[
+                    styles.pickerPill,
+                    selectedDriver === s.driver.code && styles.pickerPillActive
+                  ]}
+                  onPress={() => setSelectedDriver(s.driver.code)}
+                >
+                  <Text style={[
+                    styles.pickerText,
+                    selectedDriver === s.driver.code && styles.pickerTextActive
+                  ]}>
+                    {s.driver.code}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.fieldLabel}>COMPARE TO RIVAL</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pickerScroll}>
+              {standings.map((s) => (
+                <TouchableOpacity
+                  key={s.driver.code}
+                  style={[
+                    styles.pickerPill,
+                    selectedRival === s.driver.code && styles.pickerPillRivalActive
+                  ]}
+                  onPress={() => setSelectedRival(s.driver.code)}
+                >
+                  <Text style={[
+                    styles.pickerText,
+                    selectedRival === s.driver.code && styles.pickerTextActive
+                  ]}>
+                    {s.driver.code}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Calculator Card */}
+            {calc && (
+              <View style={styles.calcCard}>
+                <View style={styles.calcHeader}>
+                  <Text style={styles.calcTitle}>{calc.target_driver} vs {calc.rival_driver}</Text>
+                  <Text style={[
+                    styles.calcBadge,
+                    calc.is_eliminated ? styles.badgeEliminated : styles.badgeEligible
+                  ]}>
+                    {calc.is_eliminated ? "ELIMINATED" : calc.clinched_now ? "CHAMPION CLINCHED" : "TITLE ELIGIBLE"}
+                  </Text>
+                </View>
+
+                <View style={styles.metricRow}>
+                  <View style={styles.metricBox}>
+                    <Text style={styles.metricLabel}>GAP TO RIVAL</Text>
+                    <Text style={styles.metricValue}>
+                      {spoilerShield ? "••" : (calc.point_gap > 0 ? `-${calc.point_gap}` : `+${Math.abs(calc.point_gap)}`)}
+                    </Text>
+                  </View>
+                  <View style={styles.metricBox}>
+                    <Text style={styles.metricLabel}>MIN PTS NEEDED</Text>
+                    <Text style={styles.metricValueHighlight}>
+                      {calc.min_points_needed_if_rival_zero ?? "N/A"}
+                    </Text>
+                  </View>
+                  <View style={styles.metricBox}>
+                    <Text style={styles.metricLabel}>RIVAL CAP</Text>
+                    <Text style={styles.metricValueWarn}>
+                      ≤ {calc.max_rival_points_allowed}
+                    </Text>
+                  </View>
+                </View>
+
+                {calc.scenarios && calc.scenarios.map((sc: any, idx: number) => (
+                  <View key={idx} style={styles.scenarioCard}>
+                    <Text style={styles.scenarioTitle}>{sc.name}</Text>
+                    <Text style={styles.scenarioDesc}>{sc.description}</Text>
+                    <View style={styles.scenarioStats}>
+                      <Text style={styles.scenarioStatTarget}>Target: +{sc.target_score} pts</Text>
+                      <Text style={styles.scenarioStatRival}>Rival Cap: ≤ {sc.rival_max_allowed} pts</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -486,5 +612,162 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
+  intelContainer: {
+    paddingBottom: 24,
+  },
+  intelSub: {
+    color: '#8F96A3',
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  fieldLabel: {
+    color: '#8F96A3',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginBottom: 6,
+    letterSpacing: 1,
+  },
+  pickerScroll: {
+    marginBottom: 14,
+  },
+  pickerPill: {
+    backgroundColor: '#15171E',
+    borderColor: '#272A35',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  pickerPillActive: {
+    backgroundColor: '#E10600',
+    borderColor: '#E10600',
+  },
+  pickerPillRivalActive: {
+    backgroundColor: '#3671C6',
+    borderColor: '#3671C6',
+  },
+  pickerText: {
+    color: '#8F96A3',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  pickerTextActive: {
+    color: '#FFF',
+  },
+  calcCard: {
+    backgroundColor: '#15171E',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#272A35',
+    padding: 14,
+    marginTop: 8,
+  },
+  calcHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#272A35',
+    paddingBottom: 8,
+  },
+  calcTitle: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  calcBadge: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  badgeEliminated: {
+    backgroundColor: '#3B1214',
+    color: '#FF6464',
+  },
+  badgeEligible: {
+    backgroundColor: '#11331B',
+    color: '#4ADE80',
+  },
+  metricRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  metricBox: {
+    backgroundColor: '#0D0E12',
+    borderWidth: 1,
+    borderColor: '#272A35',
+    borderRadius: 8,
+    padding: 8,
+    flex: 1,
+    marginHorizontal: 3,
+  },
+  metricLabel: {
+    color: '#8F96A3',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  metricValue: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  metricValueHighlight: {
+    color: '#64D2FF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  metricValueWarn: {
+    color: '#FBBF24',
+    fontSize: 13,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  scenarioCard: {
+    backgroundColor: '#0D0E12',
+    borderWidth: 1,
+    borderColor: '#272A35',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  scenarioTitle: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  scenarioDesc: {
+    color: '#8F96A3',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  scenarioStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#272A35',
+    paddingTop: 6,
+    marginTop: 6,
+  },
+  scenarioStatTarget: {
+    color: '#64D2FF',
+    fontSize: 11,
+    fontFamily: 'monospace',
+  },
+  scenarioStatRival: {
+    color: '#FBBF24',
+    fontSize: 11,
+    fontFamily: 'monospace',
+  },
 });
+
 

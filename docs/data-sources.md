@@ -49,20 +49,32 @@ Every response from `/api/v1/...` that supplies session results or championship 
      - `v1/car_data`: Vehicle telemetry (speed, throttle, brake, gear, RPM, DRS)
      - `v1/weather`: Track temperature, air temperature, wind speed/direction, rain
      - `v1/race_control`: Track status, flags, safety car, and investigation notices
-   - Deduplication: In-memory sliding cache based on topic, driver number, ISO timestamp, and lap number prevents duplicate event dispatch.
-   - Stream Diagnostics (`GET /api/v1/live/diagnostics`): Reports operational status (`CONNECTED`, `CONNECTING`, `DISCONNECTED`, `CREDENTIALS_MISSING`), broker address, subscribed topics, deduplication stats, connected client count, and ingestion lag.
-2. **Dynamic Session Selection & Data States**:
-   - Sessions Endpoint (`GET /api/v1/live/sessions`): Dynamically resolves internal IDs to upstream session keys (e.g. `2024_01_race` $\to$ `9472`), indicating active data state (`LIVE` vs `HISTORICAL`).
+   - Deduplication & Event Ordering (Release 2.1.2):
+     - Bounded LRU OrderedDict cache (2000 records) tracks record identifiers (`_id`, `_key`, or `{topic}:{driver}:{lap}:{date}`) with full content signatures.
+     - Differentiates repeated identical deliveries (filtered) from incremental progress sharing record keys (e.g. lap sector 2 completion updates same lap record).
+     - Per-entity monotonic timestamp tracking drops stale out-of-order updates (`msg_dt < last_seen_dt`).
+     - Rejects cross-session messages not matching active `session_key`.
+     - Handles malformed JSON payloads and unexpected types safely without crash.
+   - Stream Diagnostics (`GET /api/v1/live/diagnostics`): Reports operational status (`CONNECTED_RECEIVING`, `CONNECTED_IDLE`, `CONNECTING`, `DISCONNECTED`, `CREDENTIALS_MISSING`), broker address, subscribed topics, deduplication stats, out-of-order filtered count, connected client count, and ingestion lag.
+2. **Championship Intelligence Scenario Engine (Release 2.1.2)**:
+   - Scenario Calculator Endpoint (`GET /api/v1/championship/calculator`):
+     - Evaluates "What does this driver need to win?" against rivals using pure mathematical bounds under official FIA Sporting Regulations.
+     - Computes exact point gap, minimum points needed if rival scores zero, maximum rival points allowed before lockout, clinching feasibility, and statutory countback tie-break advantages.
+     - Verified across 2024 and 2026 sporting regulations (including 2026 qualifying countback fallback and sprint distance gates).
+     - Zero probabilistic hallucination or chat simulations.
+3. **Dynamic Session Selection & Data States**:
+   - Sessions Endpoint (`GET /api/v1/live/sessions`): Dynamically resolves internal IDs to upstream session keys (e.g. `2024_01_race` -> `9472`), indicating active data state (`LIVE` vs `HISTORICAL`).
    - Web & Mobile Dynamic Selectors: Allows users to seamlessly switch between active live sessions and historical/demo sessions without hardcoded routes.
    - Non-Fabrication Rule: Historical or offline sessions are never labeled `LIVE`. If credentials or live sessions are absent, status is honestly displayed as `HISTORICAL` or `CREDENTIALS_MISSING`.
-3. **WebSocket Real-Time Delivery (`/ws/live/{session_id}`)**:
+4. **WebSocket Real-Time Delivery (`/ws/live/{session_id}`)**:
    - Initial Message: Complete `SNAPSHOT` (`LiveSessionSnapshot`) containing timing tower, pit stops, stints, race control, track map coordinates, weather, and provenance.
    - Streaming Updates: Incremental deltas (`TIMING`, `RACE_CONTROL`, `WEATHER`, `MAP_POSITIONS`, `TELEMETRY`) with monotonic sequence numbers.
    - Heartbeat & Resync: Ping/Pong frame every 15 seconds; `RESYNC` request triggers full fresh snapshot.
    - Backpressure Protection: Max subscriber queue size of 100 with oldest-message eviction on slow clients.
-4. **Circuit Geometry & Track Coordinates**:
+5. **Circuit Geometry & Track Coordinates**:
    - Verified FIA track path coordinates for Bahrain International Circuit (`5.412 km`).
    - High-frequency car coordinates from `v1/location` normalized to track SVG viewport.
+
 
 ## 4. Known Limitations & Stabilization Notes (Release 2.1.1)
 - **Local Development Database**: Uses `postgresql+asyncpg` in Docker Compose (loopback binding `127.0.0.1:8000`) and `sqlite+aiosqlite` for offline local unit test runs.

@@ -229,6 +229,80 @@ def test_openf1_stream_manager_deduplication_and_filtering():
     assert manager.total_duplicates_filtered == 1
     assert len(events_received) == 2
 
+def test_openf1_stream_incremental_updates_and_out_of_order():
+    from app.providers.openf1_stream import OpenF1StreamManager
+
+    events = []
+    manager = OpenF1StreamManager(event_callback=lambda t, p: events.append((t, p)))
+    manager.active_session_key = "9472"
+
+    # 1. Lap sector 1 completion
+    msg_s1 = json.dumps({
+        "session_key": 9472,
+        "_id": "lap_1_d1",
+        "driver_number": 1,
+        "lap_number": 10,
+        "date": "2024-03-02T15:20:00.000Z",
+        "duration_sector_1": 28.5
+    }).encode("utf-8")
+    manager._handle_raw_message("v1/laps", msg_s1)
+    assert len(events) == 1
+    assert events[-1][1]["duration_sector_1"] == 28.5
+
+    # 2. Duplicate delivery of exact same message - filtered!
+    manager._handle_raw_message("v1/laps", msg_s1)
+    assert len(events) == 1
+    assert manager.total_duplicates_filtered == 1
+
+    # 3. Incremental update for same record key (_id: lap_1_d1) with Sector 2 completed
+    msg_s2 = json.dumps({
+        "session_key": 9472,
+        "_id": "lap_1_d1",
+        "driver_number": 1,
+        "lap_number": 10,
+        "date": "2024-03-02T15:20:30.000Z",
+        "duration_sector_2": 39.1
+    }).encode("utf-8")
+    manager._handle_raw_message("v1/laps", msg_s2)
+    assert len(events) == 2
+    # Ensure previous sector 1 is preserved via enrichment
+    assert events[-1][1]["duration_sector_1"] == 28.5
+    assert events[-1][1]["duration_sector_2"] == 39.1
+
+    # 4. Out-of-order message with older timestamp for driver 1
+    msg_stale = json.dumps({
+        "session_key": 9472,
+        "driver_number": 1,
+        "date": "2024-03-02T15:19:00.000Z",
+        "lap_number": 9
+    }).encode("utf-8")
+    manager._handle_raw_message("v1/laps", msg_stale)
+    assert len(events) == 2 # Stale message rejected
+    assert manager.total_out_of_order_filtered == 1
+
+    # 5. Malformed payload handled safely without crash
+    manager._handle_raw_message("v1/laps", b"invalid json content{{{")
+    manager._handle_raw_message("v1/laps", b"")
+    assert len(events) == 2 # Safely ignored
+
+def test_openf1_stream_diagnostics_states():
+    from app.providers.openf1_stream import OpenF1StreamManager
+
+    manager = OpenF1StreamManager()
+    diag = manager.get_diagnostics()
+    assert diag["upstream_provider"] == "OpenF1_MQTT_Stream"
+    assert "total_duplicates_filtered" in diag
+    assert "total_out_of_order_filtered" in diag
+
+    # Simulate connected receiving
+    manager.is_connected = True
+    manager.last_upstream_timestamp = datetime.now(timezone.utc)
+    diag_receiving = manager.get_diagnostics()
+    assert diag_receiving["connection_status"] == "CONNECTED_RECEIVING"
+    assert diag_receiving["ingestion_lag_seconds"] is not None
+    assert diag_receiving["ingestion_lag_seconds"] <= 1.0
+
+
 @pytest.mark.asyncio
 async def test_live_manager_stream_event_to_subscriber():
     """
