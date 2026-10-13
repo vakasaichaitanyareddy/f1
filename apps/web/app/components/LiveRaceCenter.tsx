@@ -203,12 +203,17 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
   };
 
   useEffect(() => {
+    // Clear snapshot on session change so old data cannot linger
+    setSnapshot(null);
+    setConnectionState("CONNECTING");
+
+    let currentActiveSession = sessionId;
+
     // 1. Initial REST fetch for snapshot fallback
     fetch(`http://localhost:8000/api/v1/live/${sessionId}/snapshot`)
-
       .then((res) => res.json())
       .then((data) => {
-        if (data && data.session_id) setSnapshot(data);
+        if (currentActiveSession === sessionId && data && data.session_id) setSnapshot(data);
       })
       .catch((err) => console.error("Snapshot fetch error", err));
 
@@ -230,6 +235,9 @@ export default function LiveRaceCenter({ sessionId = "2024_01_race", spoilerShie
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+        if (msg.session_id && msg.session_id !== sessionId) {
+          return; // Ignore stale messages from previous session
+        }
         if (msg.type === "SNAPSHOT") {
           setSnapshot(msg.payload);
         } else if (msg.type === "TIMING") {

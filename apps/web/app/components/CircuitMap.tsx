@@ -18,6 +18,9 @@ interface CircuitMapProps {
 const BAHRAIN_CIRCUIT_PATH = "M 120 400 L 120 180 C 120 140, 160 120, 200 120 L 320 120 C 350 120, 360 150, 350 170 L 320 220 C 310 240, 330 260, 360 260 L 460 260 C 490 260, 500 290, 480 310 L 430 360 C 410 380, 430 400, 460 400 L 520 400 C 560 400, 580 430, 560 460 L 510 520 C 490 540, 450 540, 430 520 L 380 470 C 360 450, 320 450, 300 480 L 260 540 C 240 570, 200 570, 180 540 L 140 480 C 120 450, 120 430, 120 400 Z";
 
 export default function CircuitMap({ circuitName, driverPositions = [] }: CircuitMapProps) {
+  // Verify that the selected circuit matches verified geometry (Bahrain International Circuit)
+  const isBahrainCircuit = circuitName.toLowerCase().includes("bahrain") || circuitName.toLowerCase().includes("sakhir");
+
   // Normalize OpenF1 coordinates (typically -500 to +7000) into SVG viewport (viewBox 0 0 700 650)
   const normalizeCoord = (x: number, y: number) => {
     // Map bounds: x ~ [3000, 6500], y ~ [-600, 0]
@@ -37,13 +40,25 @@ export default function CircuitMap({ circuitName, driverPositions = [] }: Circui
           <h3 className="text-white font-bold text-base">{circuitName}</h3>
         </div>
         <div className="flex items-center space-x-2 text-xs text-[#8F96A3] bg-[#15171E] px-3 py-1.5 rounded border border-[#272A35]">
-          <span className="w-2 h-2 rounded-full bg-[#30D158] animate-pulse"></span>
-          <span>LIVE GPS</span>
+          <span className={`w-2 h-2 rounded-full ${isBahrainCircuit ? "bg-[#30D158] animate-pulse" : "bg-amber-400"}`}></span>
+          <span>{isBahrainCircuit ? "LIVE GPS" : "LAYOUT PENDING"}</span>
         </div>
       </div>
 
-      {/* Interactive SVG Circuit Viewport */}
-      <div className="relative flex-1 flex items-center justify-center">
+      {!isBahrainCircuit ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-2">
+          <div className="w-10 h-10 rounded-full bg-[#15171E] border border-[#272A35] flex items-center justify-center text-amber-400 font-bold">
+            !
+          </div>
+          <h4 className="text-sm font-bold text-white">Circuit Layout Unavailable</h4>
+          <p className="text-xs text-[#8F96A3] max-w-xs">
+            Verified FIA track geometry coordinates are currently calibrated for Bahrain International Circuit. Geometry for {circuitName} is scheduled for Release 4 (Circuit Analytics).
+          </p>
+        </div>
+      ) : (
+        <>
+        {/* Interactive SVG Circuit Viewport */}
+        <div className="relative flex-1 flex items-center justify-center">
         <svg
           viewBox="0 0 700 650"
           className="w-full h-full max-h-[290px] drop-shadow-[0_0_15px_rgba(225,6,0,0.15)]"
@@ -140,6 +155,8 @@ export default function CircuitMap({ circuitName, driverPositions = [] }: Circui
         </div>
         <span className="font-mono text-xs text-[#8F96A3]">5.412 km • 15 Turns</span>
       </div>
+      </>
+      )}
     </div>
   );
 }

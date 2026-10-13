@@ -20,6 +20,42 @@ interface DriverTiming {
   positions_gained: number;
 }
 
+interface PitStop {
+  driver_number: number;
+  lap_number: number;
+  pit_duration?: number;
+  lane_duration?: number;
+  timestamp: string;
+}
+
+interface RaceControl {
+  date: string;
+  lap_number?: number;
+  category: string;
+  message: string;
+  flag?: string;
+  scope?: string;
+  sector?: number;
+}
+
+interface DriverMapPosition {
+  driver_number: number;
+  driver_code: string;
+  team_color: string;
+  x: number;
+  y: number;
+}
+
+interface TelemetryItem {
+  driver_number: number;
+  speed: number;
+  throttle: number;
+  brake: number;
+  n_gear: number;
+  drs: number;
+  rpm: number;
+}
+
 interface LiveSnapshot {
   session_id: string;
   session_name: string;
@@ -29,6 +65,10 @@ interface LiveSnapshot {
   track_status: string;
   data_state?: string;
   timing_tower: DriverTiming[];
+  pit_stops?: PitStop[];
+  race_control?: RaceControl[];
+  driver_map_positions?: DriverMapPosition[];
+  telemetry?: TelemetryItem[];
   weather?: {
     air_temperature: number;
     track_temperature: number;
@@ -51,6 +91,8 @@ interface AvailableSession {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'LIVE' | 'STANDINGS' | 'CHAMPIONSHIP'>('LIVE');
+  const [liveSubView, setLiveSubView] = useState<'TIMING' | 'MAP' | 'TELEMETRY' | 'PITS' | 'RACE_CONTROL'>('TIMING');
+  const [selectedDriverNum, setSelectedDriverNum] = useState<number>(1);
   const [standings, setStandings] = useState<any[]>([]);
   const [liveData, setLiveData] = useState<LiveSnapshot | null>(null);
   const [availableSessions, setAvailableSessions] = useState<AvailableSession[]>([]);
@@ -105,12 +147,16 @@ export default function App() {
   }, [selectedDriver, selectedRival]);
 
   useEffect(() => {
-    // Fetch live snapshot REST fallback for selected session
+    // Clear previous session data so old session values cannot linger during switch
+    setLiveData(null);
     setLoading(true);
+
+    let activeSession = selectedSessionId;
+
     fetch(`http://localhost:8000/api/v1/live/${selectedSessionId}/snapshot`)
       .then(res => res.json())
       .then(data => {
-        if (data && data.session_id) {
+        if (activeSession === selectedSessionId && data && data.session_id) {
           setLiveData(data);
           setLoading(false);
         }
@@ -125,6 +171,10 @@ export default function App() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+          // Reject messages intended for another session if received after a switch
+          if (msg.session_id && msg.session_id !== selectedSessionId) {
+            return;
+          }
           if (msg.type === 'SNAPSHOT') {
             setLiveData(msg.payload);
           } else if (msg.type === 'TIMING') {
@@ -135,6 +185,27 @@ export default function App() {
               timing_tower: msg.payload.timing_tower ?? prev.timing_tower,
               data_state: msg.data_state ?? prev.data_state
             } : prev);
+          } else if (msg.type === 'MAP_POSITIONS') {
+            setLiveData(prev => prev ? {
+              ...prev,
+              driver_map_positions: msg.payload
+            } : prev);
+          } else if (msg.type === 'TELEMETRY') {
+            setLiveData(prev => prev ? {
+              ...prev,
+              telemetry: msg.payload
+            } : prev);
+          } else if (msg.type === 'RACE_CONTROL') {
+            setLiveData(prev => {
+              if (!prev) return prev;
+              const prevRc = prev.race_control || [];
+              const updatedRc = [...prevRc, msg.payload].slice(-30);
+              return {
+                ...prev,
+                race_control: updatedRc,
+                track_status: msg.payload.flag === 'RED' ? 'RED' : (msg.payload.flag?.includes('YELLOW') ? 'YELLOW' : prev.track_status)
+              };
+            });
           }
         } catch (_) {}
       };
@@ -236,30 +307,260 @@ export default function App() {
               </Text>
             </View>
 
-            {/* Timing Tower */}
-            <Text style={styles.sectionTitle}>TIMING TOWER</Text>
+            {/* Sub-view switcher for Mobile Live Race Center */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subViewPickerScroll}>
+              <TouchableOpacity
+                style={[styles.subViewPill, liveSubView === 'TIMING' && styles.subViewPillActive]}
+                onPress={() => setLiveSubView('TIMING')}
+              >
+                <Text style={[styles.subViewText, liveSubView === 'TIMING' && styles.subViewTextActive]}>TIMING</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subViewPill, liveSubView === 'MAP' && styles.subViewPillActive]}
+                onPress={() => setLiveSubView('MAP')}
+              >
+                <Text style={[styles.subViewText, liveSubView === 'MAP' && styles.subViewTextActive]}>CIRCUIT MAP ({liveData?.driver_map_positions?.length || 0})</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subViewPill, liveSubView === 'TELEMETRY' && styles.subViewPillActive]}
+                onPress={() => setLiveSubView('TELEMETRY')}
+              >
+                <Text style={[styles.subViewText, liveSubView === 'TELEMETRY' && styles.subViewTextActive]}>TELEMETRY</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subViewPill, liveSubView === 'PITS' && styles.subViewPillActive]}
+                onPress={() => setLiveSubView('PITS')}
+              >
+                <Text style={[styles.subViewText, liveSubView === 'PITS' && styles.subViewTextActive]}>PIT STOPS ({liveData?.pit_stops?.length || 0})</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subViewPill, liveSubView === 'RACE_CONTROL' && styles.subViewPillActive]}
+                onPress={() => setLiveSubView('RACE_CONTROL')}
+              >
+                <Text style={[styles.subViewText, liveSubView === 'RACE_CONTROL' && styles.subViewTextActive]}>RACE CONTROL ({liveData?.race_control?.length || 0})</Text>
+              </TouchableOpacity>
+            </ScrollView>
 
-            {liveData?.timing_tower?.map((t) => (
-              <View key={t.driver_number} style={styles.timingRow}>
-                <Text style={styles.positionText}>{spoilerShield ? "•" : `P${t.position}`}</Text>
-                <View style={[styles.teamAccent, { backgroundColor: t.team_color }]} />
-                <View style={styles.driverInfo}>
-                  <Text style={styles.driverCode}>{t.driver_code}</Text>
-                  <Text style={styles.teamName}>{t.team_name}</Text>
-                </View>
-                <View style={styles.tireBadge}>
-                  <Text style={styles.tireText}>{t.tire_compound?.[0] || "?"}</Text>
-                </View>
-                <View style={styles.lapTimes}>
-                  <Text style={styles.gapText}>
-                    {spoilerShield ? "-" : (t.gap_to_leader === 0 ? "LEADER" : `+${t.gap_to_leader?.toFixed(3)}s`)}
-                  </Text>
-                  <Text style={styles.bestTimeText}>
-                    {spoilerShield ? "-:--.---" : formatLapTime(t.best_lap_time)}
-                  </Text>
-                </View>
+            {/* SUB-VIEW 1: TIMING TOWER */}
+            {liveSubView === 'TIMING' && (
+              <View>
+                <Text style={styles.sectionTitle}>TIMING TOWER</Text>
+                {liveData?.timing_tower?.map((t) => (
+                  <TouchableOpacity
+                    key={t.driver_number}
+                    style={[styles.timingRow, selectedDriverNum === t.driver_number && styles.timingRowSelected]}
+                    onPress={() => setSelectedDriverNum(t.driver_number)}
+                  >
+                    <Text style={styles.positionText}>{spoilerShield ? "•" : `P${t.position}`}</Text>
+                    <View style={[styles.teamAccent, { backgroundColor: t.team_color }]} />
+                    <View style={styles.driverInfo}>
+                      <Text style={styles.driverCode}>{t.driver_code}</Text>
+                      <Text style={styles.teamName}>{t.team_name}</Text>
+                    </View>
+                    <View style={styles.tireBadge}>
+                      <Text style={styles.tireText}>{t.tire_compound?.[0] || "?"} L{t.stint_lap_count}</Text>
+                    </View>
+                    <View style={styles.lapTimes}>
+                      <Text style={styles.gapText}>
+                        {spoilerShield ? "-" : (t.gap_to_leader === 0 ? "LEADER" : `+${t.gap_to_leader?.toFixed(3)}s`)}
+                      </Text>
+                      <Text style={styles.bestTimeText}>
+                        {spoilerShield ? "-:--.---" : formatLapTime(t.best_lap_time)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
               </View>
-            ))}
+            )}
+
+            {/* SUB-VIEW 2: CIRCUIT MAP (D4-01) */}
+            {liveSubView === 'MAP' && (() => {
+              const circuitName = liveData?.circuit_name || "Grand Prix Circuit";
+              const isBahrain = circuitName.toLowerCase().includes("bahrain") || circuitName.toLowerCase().includes("sakhir");
+              return (
+                <View style={styles.mapCard}>
+                  <View style={styles.mapHeaderRow}>
+                    <Text style={styles.mapCircuitTitle}>{circuitName}</Text>
+                    <Text style={styles.mapBeaconCount}>
+                      {isBahrain ? `GPS ACTIVE: ${liveData?.driver_map_positions?.length || 0} CARS` : "LAYOUT PENDING"}
+                    </Text>
+                  </View>
+                  {!isBahrain ? (
+                    <View style={styles.emptyBox}>
+                      <Text style={styles.emptyText}>Circuit Layout Unavailable</Text>
+                      <Text style={styles.emptyTelemSub}>
+                        Verified track geometry is calibrated for Bahrain GP. Geometry for {circuitName} is scheduled for Release 4.
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      {/* Circuit Track Canvas Area */}
+                      <View style={styles.trackCanvasContainer}>
+                        <View style={styles.trackCenterline} />
+                        <View style={styles.startFinishLine}>
+                          <Text style={styles.startFinishText}>S/F</Text>
+                        </View>
+                        {/* Driver beacons positioned on track canvas */}
+                        {liveData?.driver_map_positions?.map((pos) => {
+                          // Normalize OpenF1 coordinates (bounds approx 3000..6500 x, -600..0 y)
+                          const normX = Math.max(10, Math.min(270, 20 + ((pos.x - 3000) / 3800) * 240));
+                          const normY = Math.max(10, Math.min(180, 25 + ((pos.y + 600) / 600) * 140));
+                          const isSelected = selectedDriverNum === pos.driver_number;
+                          return (
+                            <TouchableOpacity
+                              key={pos.driver_number}
+                              style={[
+                                styles.carBeacon,
+                                { left: normX, top: normY, borderColor: pos.team_color },
+                                isSelected && styles.carBeaconSelected
+                              ]}
+                              onPress={() => setSelectedDriverNum(pos.driver_number)}
+                            >
+                              <Text style={[styles.carBeaconText, { color: pos.team_color }]}>{pos.driver_code}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                      <Text style={styles.mapFooterNote}>Interactive Track View • Tap any car beacon to inspect telemetry</Text>
+                    </>
+                  )}
+                </View>
+              );
+            })()}
+
+            {/* SUB-VIEW 3: TELEMETRY INSPECTOR (D5-01) */}
+            {liveSubView === 'TELEMETRY' && (() => {
+              const driverTelem = liveData?.telemetry?.find(t => t.driver_number === selectedDriverNum);
+              const driverTiming = liveData?.timing_tower?.find(t => t.driver_number === selectedDriverNum);
+              return (
+                <View style={styles.telemetryCard}>
+                  <View style={styles.telemetryHeader}>
+                    <View style={styles.driverBadgeRow}>
+                      <View style={[styles.teamAccent, { backgroundColor: driverTiming?.team_color || '#FFF' }]} />
+                      <Text style={styles.telemetryDriverName}>
+                        #{selectedDriverNum} {driverTiming?.driver_name || `Driver ${selectedDriverNum}`} ({driverTiming?.driver_code || '---'})
+                      </Text>
+                    </View>
+                    <Text style={styles.telemetryTeamName}>{driverTiming?.team_name || 'F1 Team'}</Text>
+                  </View>
+
+                  {/* Driver Picker Pills */}
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.telemPickerScroll}>
+                    {liveData?.timing_tower?.map((t) => (
+                      <TouchableOpacity
+                        key={t.driver_number}
+                        style={[
+                          styles.telemDriverPill,
+                          selectedDriverNum === t.driver_number && styles.telemDriverPillActive
+                        ]}
+                        onPress={() => setSelectedDriverNum(t.driver_number)}
+                      >
+                        <Text style={[
+                          styles.telemDriverText,
+                          selectedDriverNum === t.driver_number && styles.telemDriverTextActive
+                        ]}>
+                          {t.driver_code}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  {driverTelem ? (
+                    <View style={styles.gaugeGrid}>
+                      <View style={styles.gaugeBox}>
+                        <Text style={styles.gaugeLabel}>SPEED</Text>
+                        <Text style={styles.gaugeValue}>{driverTelem.speed} <Text style={styles.gaugeUnit}>km/h</Text></Text>
+                      </View>
+                      <View style={styles.gaugeBox}>
+                        <Text style={styles.gaugeLabel}>GEAR</Text>
+                        <Text style={styles.gaugeValueHighlight}>{driverTelem.n_gear}</Text>
+                      </View>
+                      <View style={styles.gaugeBox}>
+                        <Text style={styles.gaugeLabel}>THROTTLE</Text>
+                        <Text style={styles.gaugeValueGreen}>{driverTelem.throttle}%</Text>
+                      </View>
+                      <View style={styles.gaugeBox}>
+                        <Text style={styles.gaugeLabel}>BRAKE</Text>
+                        <Text style={styles.gaugeValueRed}>{driverTelem.brake > 0 ? `${driverTelem.brake}%` : 'OFF'}</Text>
+                      </View>
+                      <View style={styles.gaugeBox}>
+                        <Text style={styles.gaugeLabel}>ENGINE RPM</Text>
+                        <Text style={styles.gaugeValue}>{driverTelem.rpm}</Text>
+                      </View>
+                      <View style={styles.gaugeBox}>
+                        <Text style={styles.gaugeLabel}>DRS</Text>
+                        <Text style={driverTelem.drs ? styles.gaugeValueGreen : styles.gaugeValueMuted}>
+                          {driverTelem.drs ? 'OPEN' : 'CLOSED'}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.emptyTelemBox}>
+                      <Text style={styles.emptyTelemText}>No live telemetry packets for car #{selectedDriverNum}.</Text>
+                      <Text style={styles.emptyTelemSub}>Select another driver from the pills above.</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+
+            {/* SUB-VIEW 4: PIT STOPS */}
+            {liveSubView === 'PITS' && (
+              <View style={styles.pitStopsContainer}>
+                <Text style={styles.sectionTitle}>PIT STOP LOG</Text>
+                {liveData?.pit_stops && liveData.pit_stops.length > 0 ? (
+                  liveData.pit_stops.map((p, idx) => (
+                    <View key={idx} style={styles.pitCard}>
+                      <View>
+                        <Text style={styles.pitCarNum}>CAR #{p.driver_number}</Text>
+                        <Text style={styles.pitLap}>Lap {p.lap_number}</Text>
+                      </View>
+                      <View style={styles.pitDurations}>
+                        <Text style={styles.pitDurationStop}>{p.pit_duration ? `${p.pit_duration}s stop` : 'Stop'}</Text>
+                        {p.lane_duration && (
+                          <Text style={styles.pitDurationLane}>{p.lane_duration}s lane</Text>
+                        )}
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyBox}>
+                    <Text style={styles.emptyText}>No pit stops recorded yet for this session.</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* SUB-VIEW 5: RACE CONTROL */}
+            {liveSubView === 'RACE_CONTROL' && (
+              <View style={styles.raceControlContainer}>
+                <Text style={styles.sectionTitle}>OFFICIAL RACE CONTROL TIMELINE</Text>
+                {liveData?.race_control && liveData.race_control.length > 0 ? (
+                  liveData.race_control.map((rc, idx) => (
+                    <View key={idx} style={styles.rcCard}>
+                      <View style={styles.rcTopRow}>
+                        {rc.flag && (
+                          <View style={[
+                            styles.rcFlagBadge,
+                            rc.flag === 'GREEN' || rc.flag === 'CLEAR' ? styles.rcFlagGreen :
+                            rc.flag === 'RED' ? styles.rcFlagRed : styles.rcFlagYellow
+                          ]}>
+                            <Text style={styles.rcFlagText}>{rc.flag}</Text>
+                          </View>
+                        )}
+                        <Text style={styles.rcCategory}>{rc.category}</Text>
+                        {rc.lap_number && <Text style={styles.rcLap}>Lap {rc.lap_number}</Text>}
+                      </View>
+                      <Text style={styles.rcMessage}>{rc.message}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyBox}>
+                    <Text style={styles.emptyText}>No race control notices posted.</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         ) : activeTab === 'STANDINGS' ? (
           <View>
@@ -849,6 +1150,346 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
     fontFamily: 'monospace',
+  },
+  subViewPickerScroll: {
+    backgroundColor: '#15171E',
+    borderBottomWidth: 1,
+    borderBottomColor: '#272A35',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    marginBottom: 10,
+  },
+  subViewPill: {
+    backgroundColor: '#0D0E12',
+    borderColor: '#272A35',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginRight: 6,
+  },
+  subViewPillActive: {
+    backgroundColor: '#E10600',
+    borderColor: '#E10600',
+  },
+  subViewText: {
+    color: '#8F96A3',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  subViewTextActive: {
+    color: '#FFFFFF',
+  },
+  timingRowSelected: {
+    backgroundColor: '#1E222D',
+  },
+  mapCard: {
+    backgroundColor: '#15171E',
+    borderColor: '#272A35',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  mapHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  mapCircuitTitle: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  mapBeaconCount: {
+    color: '#30D158',
+    fontSize: 9,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  trackCanvasContainer: {
+    height: 220,
+    backgroundColor: '#0D0E12',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#272A35',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  trackCenterline: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    top: 40,
+    bottom: 40,
+    borderWidth: 14,
+    borderColor: '#1E222D',
+    borderRadius: 45,
+  },
+  startFinishLine: {
+    position: 'absolute',
+    left: 15,
+    top: 100,
+    width: 25,
+    height: 4,
+    backgroundColor: '#E10600',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  startFinishText: {
+    color: '#FFF',
+    fontSize: 7,
+    fontWeight: '900',
+    marginTop: -12,
+  },
+  carBeacon: {
+    position: 'absolute',
+    backgroundColor: '#0D0E12',
+    borderWidth: 1.5,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carBeaconSelected: {
+    backgroundColor: '#272A35',
+    transform: [{ scale: 1.15 }],
+  },
+  carBeaconText: {
+    fontSize: 9,
+    fontWeight: '900',
+    fontFamily: 'monospace',
+  },
+  mapFooterNote: {
+    color: '#8F96A3',
+    fontSize: 9,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  telemetryCard: {
+    backgroundColor: '#15171E',
+    borderColor: '#272A35',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  telemetryHeader: {
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#272A35',
+    paddingBottom: 8,
+  },
+  driverBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  telemetryDriverName: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  telemetryTeamName: {
+    color: '#8F96A3',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  telemPickerScroll: {
+    marginBottom: 12,
+  },
+  telemDriverPill: {
+    backgroundColor: '#0D0E12',
+    borderWidth: 1,
+    borderColor: '#272A35',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 6,
+  },
+  telemDriverPillActive: {
+    backgroundColor: '#272A35',
+    borderColor: '#64D2FF',
+  },
+  telemDriverText: {
+    color: '#8F96A3',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  telemDriverTextActive: {
+    color: '#64D2FF',
+  },
+  gaugeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  gaugeBox: {
+    backgroundColor: '#0D0E12',
+    borderWidth: 1,
+    borderColor: '#272A35',
+    borderRadius: 8,
+    padding: 10,
+    width: '48%',
+  },
+  gaugeLabel: {
+    color: '#8F96A3',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  gaugeValue: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  gaugeValueHighlight: {
+    color: '#64D2FF',
+    fontSize: 18,
+    fontWeight: '900',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  gaugeValueGreen: {
+    color: '#30D158',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  gaugeValueRed: {
+    color: '#FF6464',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  gaugeValueMuted: {
+    color: '#8F96A3',
+    fontSize: 14,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  gaugeUnit: {
+    fontSize: 10,
+    fontWeight: 'normal',
+    color: '#8F96A3',
+  },
+  emptyTelemBox: {
+    backgroundColor: '#0D0E12',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+  },
+  emptyTelemText: {
+    color: '#8F96A3',
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  emptyTelemSub: {
+    color: '#64D2FF',
+    fontSize: 10,
+    marginTop: 4,
+  },
+  pitStopsContainer: {
+    marginBottom: 16,
+  },
+  pitCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#15171E',
+    borderBottomWidth: 1,
+    borderBottomColor: '#272A35',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  pitCarNum: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  pitLap: {
+    color: '#8F96A3',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  pitDurations: {
+    alignItems: 'flex-end',
+  },
+  pitDurationStop: {
+    color: '#30D158',
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  pitDurationLane: {
+    color: '#8F96A3',
+    fontSize: 10,
+    fontFamily: 'monospace',
+  },
+  raceControlContainer: {
+    marginBottom: 16,
+  },
+  rcCard: {
+    backgroundColor: '#15171E',
+    borderBottomWidth: 1,
+    borderBottomColor: '#272A35',
+    padding: 10,
+  },
+  rcTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  rcFlagBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  rcFlagGreen: {
+    backgroundColor: '#30D158',
+  },
+  rcFlagYellow: {
+    backgroundColor: '#FBBF24',
+  },
+  rcFlagRed: {
+    backgroundColor: '#FF6464',
+  },
+  rcFlagText: {
+    color: '#000',
+    fontSize: 8,
+    fontWeight: '900',
+  },
+  rcCategory: {
+    color: '#E10600',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  rcLap: {
+    color: '#8F96A3',
+    fontSize: 10,
+  },
+  rcMessage: {
+    color: '#FFF',
+    fontSize: 11,
+    fontFamily: 'monospace',
+  },
+  emptyBox: {
+    backgroundColor: '#15171E',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#8F96A3',
+    fontSize: 11,
   },
 });
 

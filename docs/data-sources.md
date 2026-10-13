@@ -6,8 +6,9 @@
    - Scope: Session meetings, laps, intervals, stints, pit stops, car data, position, race control messages, weather.
    - Status: Permitted community use. Rate limits (HTTP 429) respected with backend caching and graceful fallback.
    - Staleness Threshold: > 30 seconds since last heartbeat transitions state to `STALE`.
-2. **FastF1 & Ergast/Jolpica (Historical Racing Data)**:
+2. **Ergast/Jolpica & Historical Archive Providers (Historical Racing Data)**:
    - Scope: Complete historical archives from 1950 to present.
+   - Status: Jolpica/Ergast REST API (`https://api.jolpi.ca/ergast/f1`) formally superseded synchronous FastF1 (file/cache-based Pandas framework) for asynchronous FastAPI backend ingestion and database synchronization.
    - Usage: Offline ingestion and batch synchronization into durable PostgreSQL database.
 3. **Internal Normalized Schemas**:
    - `Meeting`: Race weekends with sprint/standard format indicators.

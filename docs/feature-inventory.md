@@ -65,7 +65,7 @@
 ### Module D: Live Race Center (Release 2 & Release 2.1 / 2.1.1)
 | Feature ID | Name / Description | Release Target | Status | Dependencies | Verification Evidence & Criteria |
 |---|---|---|---|---|---|
-| D1-01 | OpenF1 & FastF1 backend data adapter with quota & retry handling | R2 | [DONE] | J1-01 | OpenF1Provider adapter implemented with endpoints for drivers, positions, laps, pit stops, stints, weather, race control, location, and telemetry |
+| D1-01 | OpenF1 (Live) & Ergast/Jolpica (Historical) backend data adapters with quota & retry handling (Jolpica formally superseding FastF1 for async backend ingestion) | R2 | [DONE] | J1-01 | `OpenF1Provider` adapter implemented with endpoints for drivers, positions, laps, pit stops, stints, weather, race control, location, and telemetry; Jolpica/Ergast client configured in backend for async historical archive sync. |
 | D1-02 | Data freshness status indicator (LIVE, DELAYED, STALE, HISTORICAL, UNAVAILABLE) | R2 | [DONE] | D1-01 | Explicit provenance tagging with 30-second stale detection threshold |
 | D1-03 | Upstream MQTT/WebSocket live streaming adapter with token refresh (`openf1_stream.py`) | R2.1 | [DONE] | D1-01 | OpenF1StreamManager connects to `mqtt.openf1.org:8883` over TLS using OAuth2 token authentication from `https://api.openf1.org/token`. Live connection without credentials reports `BLOCKED: credentials not configured`. |
 | D1-04 | Message deduplication, out-of-order rejection, and multi-session event filtering | R2.1.2 | [DONE] | D1-03 | Bounded OrderedDict deduplication with content signature comparison, out-of-order rejection, and lap sector progressive enrichment tested in `test_live_race_center.py` |

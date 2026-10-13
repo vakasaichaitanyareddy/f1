@@ -382,6 +382,86 @@ async def test_upstream_token_missing_credentials_graceful_handling():
         assert stream_mgr.connection_status == "CREDENTIALS_MISSING"
         assert stream_mgr.is_connected is False
 
+@pytest.mark.asyncio
+async def test_multi_client_multi_session_isolation():
+    """
+    Verifies that multiple clients subscribing to distinct sessions
+    receive only updates corresponding to their specific subscribed session.
+    """
+    mgr = LiveSessionManager()
+    queue_session_a = mgr.subscribe("session_alpha")
+    queue_session_b = mgr.subscribe("session_beta")
+
+    # Broadcast update to session_alpha only
+    update_a = LiveIncrementalUpdate(
+        type="TIMING",
+        session_id="session_alpha",
+        sequence_number=1,
+        timestamp=datetime.now(timezone.utc),
+        data_state=DataStateEnum.LIVE,
+        data={"current_lap": 12, "leader": "VER"}
+    )
+    await mgr.broadcast_update("session_alpha", update_a)
+
+    # Queue A should receive the update
+    received_a = await queue_session_a.get()
+    assert received_a.session_id == "session_alpha"
+    assert received_a.data["leader"] == "VER"
+
+    # Queue B must NOT receive any message
+    assert queue_session_b.empty()
+
+    # Now broadcast to session_beta
+    update_b = LiveIncrementalUpdate(
+        type="RACE_CONTROL",
+        session_id="session_beta",
+        sequence_number=1,
+        timestamp=datetime.now(timezone.utc),
+        data_state=DataStateEnum.LIVE,
+        data={"flag": "YELLOW"}
+    )
+    await mgr.broadcast_update("session_beta", update_b)
+
+    # Queue B receives update, Queue A remains unaffected
+    received_b = await queue_session_b.get()
+    assert received_b.session_id == "session_beta"
+    assert received_b.data["flag"] == "YELLOW"
+    assert queue_session_a.empty()
+
+    mgr.unsubscribe("session_alpha", queue_session_a)
+    mgr.unsubscribe("session_beta", queue_session_b)
+
+@pytest.mark.asyncio
+async def test_cross_session_stream_event_isolation():
+    """
+    Verifies that on_stream_event filters events by provider session key
+    and dispatches only to subscribers of the matching mapped internal session.
+    """
+    mgr = LiveSessionManager()
+    mgr.map_session_to_provider("sess_alpha", "8881")
+    mgr.map_session_to_provider("sess_beta", "8882")
+
+    queue_alpha = mgr.subscribe("sess_alpha")
+    queue_beta = mgr.subscribe("sess_beta")
+
+    # Ingest event for Alpha (key 8881)
+    await mgr.on_stream_event("8881", "v1/timing", {"session_key": 8881, "lap": 25})
+
+    msg_alpha = await queue_alpha.get()
+    assert msg_alpha.session_id == "sess_alpha"
+    assert queue_beta.empty()
+
+    # Ingest event for Beta (key 8882)
+    await mgr.on_stream_event("8882", "v1/timing", {"session_key": 8882, "lap": 5})
+
+    msg_beta = await queue_beta.get()
+    assert msg_beta.session_id == "sess_beta"
+    assert queue_alpha.empty()
+
+    mgr.unsubscribe("sess_alpha", queue_alpha)
+    mgr.unsubscribe("sess_beta", queue_beta)
+
+
 
 
 
