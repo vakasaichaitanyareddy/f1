@@ -825,16 +825,16 @@ def calculate_driver_scenario_to_win(
             min_target_points_needed = point_gap
         else:
             min_target_points_needed = point_gap + 1.0
-        # To guarantee clinching over rival even if rival scores their maximum possible points:
-        # Target must reach: rival_points + max_rival_capacity + 1.0
-        # Additional points needed: (rival_points + max_rival_capacity + 1.0) - target_points = point_gap + max_rival_capacity + 1.0
-        min_points_to_clinch = point_gap + max_rival_capacity + 1.0
+        # A trailing driver cannot guarantee clinching if rival scores their independent maximum points:
+        # (Target cannot score more than max_target_capacity, while rival has higher base points).
+        # Clinching requires rival to drop points. Thus, independent clinch threshold is N/A.
+        min_points_to_clinch = None
         # Maximum additional points rival can score before target is eliminated (assuming target scores max)
         max_rival_points_allowed = max(0.0, max_possible_target_points - rival_points)
     elif point_gap == 0:
         # Tied with rival
         min_target_points_needed = 0.0 if countback_tie_advantage else 1.0
-        min_points_to_clinch = max_rival_capacity + 1.0
+        min_points_to_clinch = None
         max_rival_points_allowed = max_target_capacity
     else:
         # Ahead of rival (target is leading)

@@ -683,7 +683,7 @@ def test_scenario_calculator_mathematical_bounds():
     )
     assert res_tied_no_tb["point_gap"] == 0.0
     assert res_tied_no_tb["min_points_needed_if_rival_zero"] == 1.0
-    assert res_tied_no_tb["min_points_to_clinch"] == 27.0  # 26 max capacity + 1.0
+    assert res_tied_no_tb["min_points_to_clinch"] is None
 
     # 6. Exactly tied with rival with countback tie advantage
     res_tied_tb = calculate_driver_scenario_to_win(
