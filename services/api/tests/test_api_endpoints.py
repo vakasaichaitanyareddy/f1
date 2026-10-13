@@ -129,6 +129,27 @@ async def test_championship_scenario_calculator_endpoint():
         res_404 = await client.get("/api/v1/championship/calculator?driver_code=XYZ")
         assert res_404.status_code == 404
 
+@pytest.mark.asyncio
+async def test_championship_simulation_endpoint():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Run 500 iterations simulation
+        res = await client.get("/api/v1/championship/simulate?iterations=500&remaining_gps=20&remaining_sprints=5")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["iterations"] == 500
+        assert data["season"] == 2024
+        assert "probabilities" in data
+        probs = data["probabilities"]
+        assert len(probs) > 0
+        total_prob = sum(p["championship_probability_pct"] for p in probs)
+        assert 98.0 <= total_prob <= 102.0  # Sum of percentage outcomes approximates 100%
+        first = probs[0]
+        assert "driver_code" in first
+        assert "championship_probability_pct" in first
+        assert "expected_final_points" in first
+        assert data["provenance"]["source"] == "APEX_GP_MONTE_CARLO_SIMULATOR"
+
+
 
 # 2. Authentication & Authorization Edge Cases
 @pytest.mark.asyncio

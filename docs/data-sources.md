@@ -56,12 +56,18 @@ Every response from `/api/v1/...` that supplies session results or championship 
      - Rejects cross-session messages not matching active `session_key`.
      - Handles malformed JSON payloads and unexpected types safely without crash.
    - Stream Diagnostics (`GET /api/v1/live/diagnostics`): Reports operational status (`CONNECTED_RECEIVING`, `CONNECTED_IDLE`, `CONNECTING`, `DISCONNECTED`, `CREDENTIALS_MISSING`), broker address, subscribed topics, deduplication stats, out-of-order filtered count, connected client count, and ingestion lag.
-2. **Championship Intelligence Scenario Engine (Release 2.1.2)**:
+2. **Championship Intelligence Scenario Engine & Monte Carlo Simulator (Release 2.1.2 & Release 3)**:
    - Scenario Calculator Endpoint (`GET /api/v1/championship/calculator`):
      - Evaluates "What does this driver need to win?" against rivals using pure mathematical bounds under official FIA Sporting Regulations.
      - Computes exact point gap, minimum points needed if rival scores zero, maximum rival points allowed before lockout, clinching feasibility, and statutory countback tie-break advantages.
      - Verified across 2024 and 2026 sporting regulations (including 2026 qualifying countback fallback and sprint distance gates).
      - Zero probabilistic hallucination or chat simulations.
+   - Monte Carlo Season Simulator Endpoint (`GET /api/v1/championship/simulate`):
+     - Evaluates $N$ stochastic iterations (10 to 10,000 runs) of all remaining Grand Prix and Sprint sessions.
+     - Calibrated using pace-weighted power law distributions from current championship points and race wins.
+     - Models baseline mechanical and collision DNF probabilities (~7.5% per driver per session) with log-normal Gaussian variance.
+     - Returns empirical championship winning percentages, expected total points, expected race wins, and full provenance tagging.
+
 3. **Dynamic Session Selection & Data States**:
    - Sessions Endpoint (`GET /api/v1/live/sessions`): Dynamically resolves internal IDs to upstream session keys (e.g. `2024_01_race` -> `9472`), indicating active data state (`LIVE` vs `HISTORICAL`).
    - Web & Mobile Dynamic Selectors: Allows users to seamlessly switch between active live sessions and historical/demo sessions without hardcoded routes.

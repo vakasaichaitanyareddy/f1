@@ -367,10 +367,41 @@ export default function App() {
                     </View>
                   </View>
                 ))}
+
+                {/* Monte Carlo Simulation Quick Button */}
+                <TouchableOpacity
+                  style={styles.simButton}
+                  onPress={() => {
+                    fetch('http://localhost:8000/api/v1/championship/simulate?iterations=500&remaining_gps=23&remaining_sprints=6')
+                      .then(res => res.json())
+                      .then(data => {
+                        if (data.probabilities) {
+                          setCalculatorData((prev: any) => ({ ...prev, simulation: data.probabilities }));
+                        }
+                      })
+                      .catch(() => {});
+                  }}
+                >
+                  <Text style={styles.simButtonText}>🎲 Run 500x Monte Carlo Forecast</Text>
+                </TouchableOpacity>
+
+                {calculatorData?.simulation && (
+                  <View style={styles.simResultsBox}>
+                    <Text style={styles.simResultsTitle}>TITLE PROBABILITY (500 SIMS):</Text>
+                    {calculatorData.simulation.slice(0, 4).map((p: any) => (
+                      <View key={p.driver_code} style={styles.simRow}>
+                        <Text style={styles.simDriver}>{p.driver_code}</Text>
+                        <Text style={styles.simExpPts}>{p.expected_final_points} EXP PTS</Text>
+                        <Text style={styles.simPct}>{p.championship_probability_pct}%</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
           </View>
         )}
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -768,6 +799,58 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'monospace',
   },
+  simButton: {
+    backgroundColor: '#E10600',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  simButtonText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  simResultsBox: {
+    backgroundColor: '#0D0E12',
+    borderWidth: 1,
+    borderColor: '#272A35',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  simResultsTitle: {
+    color: '#FFCC00',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
+  simRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1D26',
+  },
+  simDriver: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    width: 45,
+  },
+  simExpPts: {
+    color: '#8F96A3',
+    fontSize: 10,
+    fontFamily: 'monospace',
+  },
+  simPct: {
+    color: '#64D2FF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
 });
+
 
 

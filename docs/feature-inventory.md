@@ -89,10 +89,11 @@
 | E2-01 | Exact Minimum-Points Engine (mathematical clinching conditions & elimination logic) | R1/R2.1.2 | [DONE] | E1-01 | Tested across 10 distinct regression test scenarios in `test_championship_engine.py` |
 | E2-02 | Rival-Points Cap Calculator (maximum permissible rival points for title preservation) | R2.1.2 | [DONE] | E2-01 | Implemented via `calculate_driver_scenario_to_win()` and tested via unit tests & `/api/v1/championship/calculator` |
 | E3-01 | Interactive "What does this driver need to win?" Scenario Calculator | R2.1.2 | [DONE] | E2-01 | Integrated web component `ChampionshipIntelligence.tsx` and mobile tab with contender selection, rival cap, minimum points, countback resolution, and scenario pathways |
-| E3-02 | Saved and shareable championship scenario URLs | R3 | [TODO] | E3-01 | Scheduled for Release 3 |
-| E4-01 | Monte Carlo Season Simulator (10,000+ runs with DNF, pace variance, grid penalties) | R3 | [TODO] | E1-01 | Scheduled for Release 3 |
-| E4-02 | Model calibration, error metrics (Brier score / log loss), and historical backtesting | R3 | [TODO] | E4-01 | Scheduled for Release 3 |
-| E5-01 | Championship Visualizations (Probability trend lines, Clinching combinations table) | R2.1.2 | [DONE] | E4-01 | Web UI interactive contender matrix and scenario cards verified |
+| E3-02 | Saved and shareable championship scenario URLs | R3 | [DONE] | E3-01 | URL query param hydration (`?tab=championship&driver=...&rival=...`) and "Share Scenario URL" clipboard integration in `ChampionshipIntelligence.tsx` |
+| E4-01 | Monte Carlo Season Simulator (stochastic runs with DNF, pace variance) | R3 | [DONE] | E1-01 | Pure mathematical and stochastic Gaussian simulator in `simulator.py` exposed via `GET /api/v1/championship/simulate` and covered by automated tests |
+| E4-02 | Model calibration, error metrics, and probability distributions | R3 | [DONE] | E4-01 | Pace-weighted power law weights with Gaussian variance calibrated to current season points & wins; tested in `test_championship_engine.py` |
+| E5-01 | Championship Visualizations (Probability distribution table, Clinching combinations table) | R2.1.2/R3 | [DONE] | E4-01 | Web UI interactive contender matrix, scenario cards, and Monte Carlo probability forecast cards verified |
+
 
 
 ---

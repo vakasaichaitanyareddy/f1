@@ -457,6 +457,54 @@ async def get_championship_scenario_calculator(
         }
     }
 
+@api_router.get("/championship/simulate")
+async def run_championship_simulation(
+    iterations: int = Query(1000, ge=10, le=10000, description="Number of Monte Carlo simulation runs"),
+    remaining_gps: int = Query(23, ge=0, le=30),
+    remaining_sprints: int = Query(6, ge=0, le=10),
+    season: int = Query(2024),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Executes Monte Carlo Season Simulator for remaining rounds (Feature E4-01, E4-02).
+    Calibrated against current standings, pacing weights, and historical DNF rates.
+    """
+    from app.championship.simulator import ChampionshipMonteCarloSimulator
+
+    standings = await get_driver_standings(db)
+    if not standings:
+        raise HTTPException(status_code=404, detail="No standings available to simulate")
+
+    simplified_standings = [
+        {
+            "driver_code": s.driver.code,
+            "driver_name": f"{s.driver.first_name} {s.driver.last_name}",
+            "constructor_name": s.driver.constructor_name,
+            "points": s.points,
+            "wins": s.wins
+        }
+        for s in standings
+    ]
+
+    sim = ChampionshipMonteCarloSimulator(
+        standings=simplified_standings,
+        remaining_gps=remaining_gps,
+        remaining_sprints=remaining_sprints,
+        season=season
+    )
+
+    results = sim.run_simulation(iterations=iterations)
+    results["provenance"] = {
+        "source": "APEX_GP_MONTE_CARLO_SIMULATOR",
+        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "data_state": "HISTORICAL",
+        "verified": True,
+        "is_test_fixture": True,
+        "notes": f"Simulated {iterations} season outcomes with stochastic pace variance."
+    }
+    return results
+
+
 
 # ----------------- LIVE RACE CENTER REST ENDPOINTS -----------------
 

@@ -116,6 +116,42 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
       .catch(() => setCalculating(false));
   }, [selectedDriver, selectedRival, remainingGps, remainingSprints]);
 
+  // URL Syncing & Shareable Scenario Link (E3-02)
+  const [copiedLink, setCopiedLink] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlDriver = params.get("driver");
+      const urlRival = params.get("rival");
+      if (urlDriver) setSelectedDriver(urlDriver.toUpperCase());
+      if (urlRival) setSelectedRival(urlRival.toUpperCase());
+    }
+  }, []);
+
+  const handleShareLink = () => {
+    if (typeof window !== "undefined") {
+      const url = `${window.location.origin}${window.location.pathname}?tab=championship&driver=${selectedDriver}&rival=${selectedRival}`;
+      navigator.clipboard.writeText(url);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
+
+  // Monte Carlo Simulation State (E4-01, E4-02)
+  const [simulationData, setSimulationData] = useState<any>(null);
+  const [simulating, setSimulating] = useState(false);
+
+  const runSimulation = (runs: number = 1000) => {
+    setSimulating(true);
+    fetch(`http://localhost:8000/api/v1/championship/simulate?iterations=${runs}&remaining_gps=${remainingGps}&remaining_sprints=${remainingSprints}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setSimulationData(data);
+        setSimulating(false);
+      })
+      .catch(() => setSimulating(false));
+  };
+
   const calc = scenarioData?.calculation;
 
   return (
@@ -130,27 +166,38 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
             </div>
             <h2 className="text-2xl font-black text-white">Championship Intelligence & Scenario Engine</h2>
             <p className="text-sm text-[#8F96A3] mt-1 max-w-2xl">
-              Pure mathematical evaluation of clinch thresholds, mathematical elimination, rival point allowances, and countback resolution. Zero probabilistic hallucination.
+              Pure mathematical evaluation of clinch thresholds, mathematical elimination, rival point allowances, and Monte Carlo stochastic probabilities under official FIA Sporting Regulations.
             </p>
           </div>
 
-          {/* Quick Round Configuration */}
-          <div className="flex items-center space-x-3 bg-[#0D0E12] border border-[#272A35] p-2.5 rounded-lg text-xs">
-            <div>
-              <span className="text-[#8F96A3] block">Remaining GPs:</span>
-              <span className="font-mono font-bold text-white text-sm">{remainingGps}</span>
-            </div>
-            <div className="h-6 w-[1px] bg-[#272A35]" />
-            <div>
-              <span className="text-[#8F96A3] block">Remaining Sprints:</span>
-              <span className="font-mono font-bold text-white text-sm">{remainingSprints}</span>
-            </div>
-            <div className="h-6 w-[1px] bg-[#272A35]" />
-            <div>
-              <span className="text-[#8F96A3] block">Max Available Pts:</span>
-              <span className="font-mono font-bold text-[#64D2FF] text-sm">
-                {calc?.max_remaining_capacity ?? remainingGps * 26 + remainingSprints * 8}
-              </span>
+          <div className="flex items-center space-x-3">
+            {/* Share Scenario Button (E3-02) */}
+            <button
+              onClick={handleShareLink}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-[#272A35] hover:bg-[#E10600] text-white rounded-lg text-xs font-bold transition cursor-pointer"
+            >
+              <Info className="w-4 h-4" />
+              <span>{copiedLink ? "Link Copied!" : "Share Scenario URL"}</span>
+            </button>
+
+            {/* Quick Round Configuration */}
+            <div className="flex items-center space-x-3 bg-[#0D0E12] border border-[#272A35] p-2.5 rounded-lg text-xs">
+              <div>
+                <span className="text-[#8F96A3] block">Remaining GPs:</span>
+                <span className="font-mono font-bold text-white text-sm">{remainingGps}</span>
+              </div>
+              <div className="h-6 w-[1px] bg-[#272A35]" />
+              <div>
+                <span className="text-[#8F96A3] block">Remaining Sprints:</span>
+                <span className="font-mono font-bold text-white text-sm">{remainingSprints}</span>
+              </div>
+              <div className="h-6 w-[1px] bg-[#272A35]" />
+              <div>
+                <span className="text-[#8F96A3] block">Max Available Pts:</span>
+                <span className="font-mono font-bold text-[#64D2FF] text-sm">
+                  {calc?.max_remaining_capacity ?? remainingGps * 26 + remainingSprints * 8}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -158,10 +205,21 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
 
       {/* Interactive Scenario Calculator: "What does this driver need to win?" */}
       <div className="bg-gradient-to-br from-[#15171E] to-[#1a1d26] rounded-xl border border-[#272A35] p-6 shadow-xl relative overflow-hidden">
-        <div className="flex items-center space-x-2 text-white font-bold text-lg mb-4">
-          <Calculator className="w-5 h-5 text-[#E10600]" />
-          <h3>Interactive Scenario Calculator: What Does This Driver Need to Win?</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2 text-white font-bold text-lg">
+            <Calculator className="w-5 h-5 text-[#E10600]" />
+            <h3>Interactive Scenario Calculator: What Does This Driver Need to Win?</h3>
+          </div>
+          <button
+            onClick={() => runSimulation(1000)}
+            disabled={simulating}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#E10600] hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition shadow cursor-pointer"
+          >
+            <Gauge className="w-4 h-4" />
+            <span>{simulating ? "Simulating 1,000 Seasons..." : "Run Monte Carlo Sim (1,000x)"}</span>
+          </button>
         </div>
+
 
         {/* Contender & Rival Selection Controls */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -305,9 +363,68 @@ export default function ChampionshipIntelligenceView({ spoilerShield }: Props) {
             )}
           </div>
         )}
+
+        {/* Monte Carlo Simulation Probability Results (E4-01, E4-02, E5-01) */}
+        {simulationData && (
+          <div className="mt-5 pt-5 border-t border-[#272A35] bg-[#0D0E12] rounded-xl p-5 border">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <span className="text-xs uppercase font-mono tracking-wider text-[#FFCC00] font-bold">
+                  STOCHASTIC GAUSSIAN SIMULATION
+                </span>
+                <h4 className="text-white font-bold text-base">
+                  Monte Carlo Season Forecast ({simulationData.iterations.toLocaleString()} Runs)
+                </h4>
+              </div>
+              <span className="text-xs text-[#8F96A3] font-mono">
+                Model: Pace-Weighted Stochastic
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#15171E] text-[#8F96A3] uppercase border-b border-[#272A35]">
+                    <th className="py-2.5 px-3">Driver</th>
+                    <th className="py-2.5 px-3">Current Pts</th>
+                    <th className="py-2.5 px-3 text-right">Expected Total Pts</th>
+                    <th className="py-2.5 px-3 text-right">Expected Wins</th>
+                    <th className="py-2.5 px-3 text-right">Title Probability</th>
+                    <th className="py-2.5 px-3 text-center">Probability Bar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#272A35]/60 font-mono">
+                  {simulationData.probabilities.map((p: any) => (
+                    <tr key={p.driver_code} className="hover:bg-[#1a1d26]">
+                      <td className="py-2 px-3 font-sans font-bold text-white flex items-center space-x-1.5">
+                        <span>{p.driver_name}</span>
+                        <span className="text-[#8F96A3] text-[11px] font-mono">[{p.driver_code}]</span>
+                      </td>
+                      <td className="py-2 px-3 text-[#8F96A3]">{p.current_points}</td>
+                      <td className="py-2 px-3 text-right text-white font-bold">{p.expected_final_points}</td>
+                      <td className="py-2 px-3 text-right text-[#8F96A3]">{p.expected_total_wins}</td>
+                      <td className="py-2 px-3 text-right font-bold text-[#64D2FF]">
+                        {p.championship_probability_pct}%
+                      </td>
+                      <td className="py-2 px-3">
+                        <div className="w-24 bg-[#15171E] rounded-full h-2 mx-auto overflow-hidden border border-[#272A35]">
+                          <div
+                            className="bg-[#E10600] h-full rounded-full"
+                            style={{ width: `${Math.min(100, Math.max(0, p.championship_probability_pct))}%` }}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Contenders Table */}
+
       <div className="bg-[#15171E] rounded-xl border border-[#272A35] overflow-hidden shadow-lg">
         <div className="px-6 py-4 border-b border-[#272A35] flex items-center justify-between">
           <div className="flex items-center space-x-2">

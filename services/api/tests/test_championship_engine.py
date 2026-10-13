@@ -649,6 +649,39 @@ def test_scenario_calculator_mathematical_bounds():
     assert res_clinch["clinched_now"] is True
     assert res_clinch["point_gap"] == -70.0
 
+def test_championship_monte_carlo_simulator():
+    from app.championship.simulator import ChampionshipMonteCarloSimulator
+
+    standings = [
+        {"driver_code": "VER", "points": 100.0, "wins": 3},
+        {"driver_code": "PER", "points": 80.0, "wins": 1},
+        {"driver_code": "LEC", "points": 70.0, "wins": 0},
+        {"driver_code": "NOR", "points": 60.0, "wins": 0},
+    ]
+
+    sim = ChampionshipMonteCarloSimulator(
+        standings=standings,
+        remaining_gps=5,
+        remaining_sprints=2,
+        season=2024,
+        random_seed=123
+    )
+
+    res = sim.run_simulation(iterations=1000)
+    assert res["iterations"] == 1000
+    assert len(res["probabilities"]) == 4
+
+    # Leader VER should have the highest title probability
+    ver_entry = next(p for p in res["probabilities"] if p["driver_code"] == "VER")
+    nor_entry = next(p for p in res["probabilities"] if p["driver_code"] == "NOR")
+    assert ver_entry["championship_probability_pct"] > nor_entry["championship_probability_pct"]
+    assert ver_entry["expected_final_points"] > ver_entry["current_points"]
+
+    # Sum of probabilities across all drivers should equal approximately 100%
+    total_pct = sum(p["championship_probability_pct"] for p in res["probabilities"])
+    assert 99.0 <= total_pct <= 101.0
+
+
 
 
 
