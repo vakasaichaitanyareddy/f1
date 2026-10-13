@@ -784,45 +784,66 @@ def calculate_driver_scenario_to_win(
     max_possible_target_points = target_points + max_target_capacity
     is_eliminated = max_possible_target_points < rival_points
 
-    # Check tie break if tied at max capacity vs rival's current points
+    # Check tie break if tied currently OR tied at max capacity vs rival's current points
     countback_tie_advantage = False
-    if max_possible_target_points == rival_points and target_finishes and rival_finishes:
-        hypothetical_target = list(target_finishes) + [1] * remaining_gps
-        tb = evaluate_fia_countback(
-            hypothetical_target,
-            rival_finishes,
-            qualifying_finishes_a=target_qualifying_finishes,
-            qualifying_finishes_b=rival_qualifying_finishes,
-            season=season
-        )
-        if tb < 0:
-            is_eliminated = True
-        elif tb > 0:
-            countback_tie_advantage = True
+    if target_finishes and rival_finishes:
+        if max_possible_target_points == rival_points:
+            hypothetical_target = list(target_finishes) + [1] * remaining_gps
+            tb = evaluate_fia_countback(
+                hypothetical_target,
+                rival_finishes,
+                qualifying_finishes_a=target_qualifying_finishes,
+                qualifying_finishes_b=rival_qualifying_finishes,
+                season=season
+            )
+            if tb < 0:
+                is_eliminated = True
+            elif tb > 0:
+                countback_tie_advantage = True
+        elif target_points == rival_points:
+            tb = evaluate_fia_countback(
+                target_finishes,
+                rival_finishes,
+                qualifying_finishes_a=target_qualifying_finishes,
+                qualifying_finishes_b=rival_qualifying_finishes,
+                season=season
+            )
+            if tb > 0:
+                countback_tie_advantage = True
 
-    # Minimum points target driver needs assuming rival scores 0
+    # Minimum additional points target driver needs assuming rival scores 0 in remaining events:
+    # If target is already ahead of rival, target needs 0.0 additional points to beat a rival who scores 0.
+    # If target is tied, target needs 1.0 (or 0.0 with countback advantage) to break the tie.
+    # If target is behind, target needs point_gap (if countback advantage) or point_gap + 1.0 to surpass rival.
     if is_eliminated:
         min_target_points_needed = None
+        min_points_to_clinch = None
         max_rival_points_allowed = 0.0
     elif point_gap > 0:
         # Behind rival
-        # If countback tie advantage, target needs exactly point_gap points to tie and win countback
-        # Otherwise target needs point_gap + 0.5 (or + 1) points to surpass rival
         if countback_tie_advantage:
             min_target_points_needed = point_gap
         else:
-            min_target_points_needed = point_gap + 1.0 if season >= 2010 else point_gap + 1.0
+            min_target_points_needed = point_gap + 1.0
+        # To guarantee clinching over rival even if rival scores their maximum possible points:
+        # Target must reach: rival_points + max_rival_capacity + 1.0
+        # Additional points needed: (rival_points + max_rival_capacity + 1.0) - target_points = point_gap + max_rival_capacity + 1.0
+        min_points_to_clinch = point_gap + max_rival_capacity + 1.0
         # Maximum additional points rival can score before target is eliminated (assuming target scores max)
         max_rival_points_allowed = max(0.0, max_possible_target_points - rival_points)
     elif point_gap == 0:
         # Tied with rival
-        min_target_points_needed = 1.0
+        min_target_points_needed = 0.0 if countback_tie_advantage else 1.0
+        min_points_to_clinch = max_rival_capacity + 1.0
         max_rival_points_allowed = max_target_capacity
     else:
         # Ahead of rival (target is leading)
         lead = abs(point_gap)
-        # Target clinches if lead exceeds rival's remaining capacity
-        min_target_points_needed = max(0.0, max_rival_capacity - lead + 1.0)
+        # Rival scores 0 -> Target already has more points than rival's final total (target_points > rival_points)
+        min_target_points_needed = 0.0
+        # Points needed to guarantee clinching against rival's maximum possible capacity:
+        # If lead > max_rival_capacity, already clinched (0.0 points needed)
+        min_points_to_clinch = max(0.0, max_rival_capacity - lead + 1.0)
         max_rival_points_allowed = max_rival_capacity
 
     # Clinch assessment
@@ -869,6 +890,7 @@ def calculate_driver_scenario_to_win(
         "is_eliminated": is_eliminated,
         "clinched_now": clinched_now,
         "min_points_needed_if_rival_zero": min_target_points_needed,
+        "min_points_to_clinch": min_points_to_clinch,
         "max_rival_points_allowed": round(max_rival_points_allowed, 1),
         "countback_tie_advantage": countback_tie_advantage,
         "scenarios": outcomes

@@ -722,9 +722,11 @@ export default function App() {
                     </Text>
                   </View>
                   <View style={styles.metricBox}>
-                    <Text style={styles.metricLabel}>MIN PTS NEEDED</Text>
+                    <Text style={styles.metricLabel}>{calc.point_gap < 0 ? "PTS TO CLINCH" : "MIN PTS NEEDED"}</Text>
                     <Text style={styles.metricValueHighlight}>
-                      {calc.min_points_needed_if_rival_zero ?? "N/A"}
+                      {calc.point_gap < 0 && calc.min_points_to_clinch != null
+                        ? calc.min_points_to_clinch
+                        : (calc.min_points_needed_if_rival_zero ?? "N/A")}
                     </Text>
                   </View>
                   <View style={styles.metricBox}>
